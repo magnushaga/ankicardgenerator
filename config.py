@@ -1,4 +1,8 @@
 import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Config:
     # Flask
@@ -13,7 +17,7 @@ class Config:
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB max file size
     
     # Anthropic/Claude
-    ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', 'your-api-key-here')
+    ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
     
     # CORS
-    CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:53025', 'http://localhost:55913']
+    CORS_ORIGINS = ['http://localhost:3000', 'http://localhost:53025', 'http://localhost:59713', 'http://localhost:53550']
