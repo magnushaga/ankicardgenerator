@@ -1,0 +1,25 @@
+{
+  "primary_subject": "economics",
+  "subfields": [
+    "econometrics",
+    "statistics"
+  ],
+  "requires_math": true,
+  "requires_chemistry_notation": false,
+  "requires_biology_notation": false,
+  "benefits_from_code": true,
+  "benefits_from_history": false,
+  "benefits_from_concepts": true,
+  "benefits_from_theory": true,
+  "benefits_from_examples": true,
+  "benefits_from_quotes": false,
+  "recommended_focus_areas": [
+    "statistical analysis",
+    "regression models",
+    "economic data interpretation"
+  ],
+  "special_notation_needs": [
+    "statistical symbols",
+    "mathematical equations"
+  ]
+}

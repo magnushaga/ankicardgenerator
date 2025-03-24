@@ -4,6 +4,22 @@ from config import Config
 from models import db
 from api import api
 from deck_routes import deck_routes
+import psycopg2
+from flask_sqlalchemy import SQLAlchemy
+
+def get_db_connection():
+    try:
+        conn = psycopg2.connect(
+            host='127.0.0.1',
+            database='postgres',
+            user='postgres',
+            password='admin',
+            port=5432
+        )
+        return conn
+    except Exception as e:
+        print(f"Error connecting to database: {e}")
+        raise
 
 def create_app(config_class=Config):
     app = Flask(__name__)

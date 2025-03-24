@@ -124,6 +124,7 @@ def generate_textbook_structure():
     """Generate a structured outline for a textbook"""
     data = request.get_json()
     textbook_name = data.get('textbook_name')
+    test_mode = data.get('test_mode', False)  # New parameter
     
     if not textbook_name:
         return jsonify({'error': 'textbook_name is required'}), 400
@@ -141,9 +142,9 @@ def generate_textbook_structure():
             "requires_math": True
         }
 
-    # Generate structure prompt based on analysis
+    # Modify structure prompt based on test mode
     structure_prompt = f"""
-    You are an expert in textbook organization. Please create a comprehensive nested structure for the textbook "{textbook_name}".
+    You are an expert in textbook organization. Please create a {'simplified test version with 1-2 topics per chapter' if test_mode else 'comprehensive'} nested structure for the textbook "{textbook_name}".
     
     Based on my analysis, this appears to be a {analysis["primary_subject"]} textbook
     """
@@ -161,6 +162,16 @@ def generate_textbook_structure():
         - Each topic includes progression from definitions to theorems to applications
         - Include problem-solving strategies and proof techniques
         - Note where specific mathematical tools are essential
+        """
+
+    # Modify format requirements for test mode
+    if test_mode:
+        structure_prompt += """
+        For test mode, please create a minimal structure with:
+        - 1 part
+        - 2 chapters
+        - 1-2 topics per chapter
+        - 2-3 cards per topic
         """
 
     # Add format requirements
@@ -250,10 +261,15 @@ def generate_cards():
     topic_id = data.get('topic_id')
     deck_id = data.get('deck_id')
     card_count = data.get('card_count', 5)
+    test_mode = data.get('test_mode', False)  # New parameter
     
     if not all([topic_id, deck_id]):
         return jsonify({'error': 'topic_id and deck_id are required'}), 400
         
+    # Override card count in test mode
+    if test_mode:
+        card_count = min(card_count, 3)  # Limit to maximum 3 cards in test mode
+
     try:
         topic = Topic.query.get_or_404(topic_id)
         chapter = Chapter.query.get_or_404(topic.chapter_id)
@@ -262,11 +278,13 @@ def generate_cards():
         
         # Generate cards prompt
         cards_prompt = f"""
-        Create {card_count} Anki flashcards for the topic "{topic.title}" from the textbook "{textbook.title}".
+        Create {card_count} {'simple test' if test_mode else ''} Anki flashcards for the topic "{topic.title}" from the textbook "{textbook.title}".
         
         TOPIC CONTEXT: {topic.comment}
         CHAPTER: {chapter.title}
         PART: {part.title}
+        
+        {'Keep the cards basic and straightforward for testing purposes.' if test_mode else ''}
         
         Format your response as a JSON array of card objects:
         [
