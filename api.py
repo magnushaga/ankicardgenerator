@@ -45,9 +45,79 @@ def get_anthropic_completion(prompt, max_tokens=1000, temperature=0.2):
 def test_route():
     return jsonify({'message': 'Flask backend is working!'})
 
-@api.route('/api/analyze-textbook', methods=['POST'])
-def analyze_textbook():
-    """Analyze a textbook's title to determine subject area and requirements"""
+@api.route('/api/analyze-course', methods=['POST'])
+def analyze_course():
+    """Analyze a course's title to determine subject area and requirements"""
+    data = request.get_json()
+    course_name = data.get('course_name')
+    
+    if not course_name:
+        return jsonify({'error': 'course_name is required'}), 400
+
+    analysis_prompt = f"""
+    Based solely on this course title: "{course_name}", please:
+    
+    1. Identify the primary subject area (e.g., mathematics, physics, economics, biology)
+    2. Identify any specialized subfields (e.g., organic chemistry, linear algebra, microeconomics)
+    3. Determine if this subject typically requires:
+    - Mathematical notation (equations, formulas, symbols)
+    - Chemical formulas or reactions
+    - Biological processes or diagrams
+    - Code snippets
+    - Historical context
+    - Conceptual frameworks
+    - Theoretical models
+    - Examples or case studies
+    - Quotations from key figures
+    
+    Return your analysis as a JSON object with the following structure:
+    {{
+        "primary_subject": "subject name",
+        "subfields": ["subfield1", "subfield2"],
+        "requires_math": true/false,
+        "requires_chemistry_notation": true/false,
+        "requires_biology_notation": true/false,
+        "benefits_from_code": true/false,
+        "benefits_from_history": true/false,
+        "benefits_from_concepts": true/false,
+        "benefits_from_theory": true/false,
+        "benefits_from_examples": true/false,
+        "benefits_from_quotes": true/false,
+        "recommended_focus_areas": ["focus1", "focus2", "focus3"],
+        "special_notation_needs": ["need1", "need2"]
+    }}
+    """
+    
+    try:
+        content = get_anthropic_completion(analysis_prompt)
+        
+        # Remove any markdown code blocks if present
+        if content.startswith("```json") and content.endswith("```"):
+            content = content[7:-3]
+        elif content.startswith("```") and content.endswith("```"):
+            content = content[3:-3]
+            
+        analysis = json.loads(content)
+        return jsonify(analysis)
+        
+    except Exception as e:
+        # Return default analysis as fallback
+        default_analysis = {
+            "primary_subject": "general",
+            "subfields": [],
+            "requires_math": True,
+            "requires_chemistry_notation": False,
+            "requires_biology_notation": False,
+            "benefits_from_code": False,
+            "benefits_from_history": True,
+            "benefits_from_concepts": True,
+            "benefits_from_theory": True,
+            "benefits_from_examples": True,
+            "benefits_from_quotes": True,
+            "recommended_focus_areas": ["core concepts", "critical thinking", "applications"],
+            "special_notation_needs": []
+        }
+        return jsonify({"error": str(e), "fallback_analysis": default_analysis}), 500
     data = request.get_json()
     textbook_name = data.get('textbook_name')
     
@@ -119,9 +189,101 @@ def analyze_textbook():
         }
         return jsonify({"error": str(e), "fallback_analysis": default_analysis}), 500
 
-@api.route('/api/generate-textbook-structure', methods=['POST'])
-def generate_textbook_structure():
-    """Generate a structured outline for a textbook"""
+@api.route('/api/generate-course-structure', methods=['POST'])
+def generate_course_structure():
+    """Generate a structured outline for a course"""
+    data = request.get_json()
+    course_name = data.get('course_name')
+    
+    if not course_name:
+        return jsonify({'error': 'course_name is required'}), 400
+
+    # First get the analysis
+    try:
+        analysis_response = get_anthropic_completion(
+            f'Analyze this course title: "{course_name}" and return a JSON with primary_subject, subfields, and requirements.'
+        )
+        analysis = json.loads(analysis_response)
+    except Exception as e:
+        analysis = {
+            "primary_subject": "general",
+            "subfields": [],
+            "requires_math": True
+        }
+
+    # Generate structure prompt based on analysis
+    structure_prompt = f"""
+    You are an expert in course organization. Please create a comprehensive nested structure for the course "{course_name}".
+    
+    Based on my analysis, this appears to be a {analysis["primary_subject"]} course
+    """
+    
+    if analysis.get("subfields"):
+        subfields = ", ".join(analysis["subfields"])
+        structure_prompt += f" with focus on {subfields}"
+    
+    structure_prompt += ".\n\n"
+    
+    # Add subject-specific instructions
+    if analysis.get("requires_math") or analysis["primary_subject"] in ["mathematics", "physics"]:
+        structure_prompt += """
+        For this mathematics-focused content:
+        - Each topic includes progression from definitions to theorems to applications
+        - Include problem-solving strategies and proof techniques
+        - Note where specific mathematical tools are essential
+        """
+
+    # Add format requirements
+    structure_prompt += """
+    Format your response as a JSON object that follows this structure exactly:
+    
+    {
+        "topics": [
+            {
+                "title": "[Topic Title]",
+                "comment": "[Focus/importance of this topic]",
+                "card_count": 5
+            }
+        ]
+    }
+    """
+    
+    try:
+        content = get_anthropic_completion(structure_prompt, max_tokens=4000, temperature=0.3)
+        
+        # Clean up JSON string
+        if content.startswith("```json") and content.endswith("```"):
+            content = content[7:-3]
+        elif content.startswith("```") and content.endswith("```"):
+            content = content[3:-3]
+            
+        structure = json.loads(content)
+        
+        # Create database entries
+        course = Course(
+            id=uuid.uuid4(),
+            title=course_name,
+            user_id=1,  # Assuming a default user for now
+            description=analysis["primary_subject"]
+        )
+        db.session.add(course)
+        
+        for topic_idx, topic_data in enumerate(structure["topics"]):
+            topic = Topic(
+                id=uuid.uuid4(),
+                course_id=course.id,
+                title=topic_data["title"],
+                comment=topic_data["comment"],
+                order_index=topic_idx
+            )
+            db.session.add(topic)
+        
+        db.session.commit()
+        return jsonify(structure)
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
     data = request.get_json()
     textbook_name = data.get('textbook_name')
     
@@ -243,9 +405,71 @@ def generate_textbook_structure():
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
-@api.route('/api/generate-cards', methods=['POST'])
-def generate_cards():
-    """Generate flashcards for a specific topic"""
+@api.route('/api/generate-course-cards', methods=['POST'])
+def generate_course_cards():
+    """Generate flashcards for a specific course topic"""
+    data = request.get_json()
+    topic_id = data.get('topic_id')
+    deck_id = data.get('deck_id')
+    card_count = data.get('card_count', 5)
+    
+    if not all([topic_id, deck_id]):
+        return jsonify({'error': 'topic_id and deck_id are required'}), 400
+        
+    try:
+        topic = Topic.query.get_or_404(topic_id)
+        course = Course.query.get_or_404(topic.course_id)
+        
+        # Generate cards prompt
+        cards_prompt = f"""
+        Create {card_count} Anki flashcards for the topic "{topic.title}" from the course "{course.title}".
+        
+        TOPIC CONTEXT: {topic.comment}
+        COURSE CONTENT: {course.content}
+        COURSE ATTACHMENTS: {', '.join(course.attachments)}
+        
+        Format your response as a JSON array of card objects:
+        [
+            {{
+                "front": "[Clear, specific question]",
+                "back": "[Comprehensive answer with appropriate notation]"
+            }}
+        ]
+        """
+        
+        content = get_anthropic_completion(cards_prompt, max_tokens=4000, temperature=0.3)
+        
+        # Clean up JSON string
+        if content.startswith("```json") and content.endswith("```"):
+            content = content[7:-3]
+        elif content.startswith("```") and content.endswith("```"):
+            content = content[3:-3]
+            
+        cards_data = json.loads(content)
+        
+        # Create cards in database
+        created_cards = []
+        for card_data in cards_data:
+            card = Card(
+                id=uuid.uuid4(),
+                deck_id=deck_id,
+                topic_id=topic_id,
+                front=card_data["front"],
+                back=card_data["back"]
+            )
+            db.session.add(card)
+            created_cards.append({
+                "id": str(card.id),
+                "front": card.front,
+                "back": card.back
+            })
+        
+        db.session.commit()
+        return jsonify(created_cards)
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
     data = request.get_json()
     topic_id = data.get('topic_id')
     deck_id = data.get('deck_id')
@@ -326,8 +550,13 @@ def review_card():
     try:
         card = Card.query.get_or_404(card_id)
         
-        # Update card using SuperMemo2
-        prev_values, new_values = update_card_review(card, quality)
+        # Determine if the card is from a textbook or a course
+        if card.topic.chapter:
+            # Textbook-based card
+            prev_values, new_values = update_card_review(card, quality)
+        else:
+            # Course-based card
+            prev_values, new_values = update_card_review(card, quality)
         
         # Record the review
         review = CardReview(
