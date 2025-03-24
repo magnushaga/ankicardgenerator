@@ -1,11 +1,9 @@
 from datetime import datetime
-from flask_sqlalchemy import SQLAlchemy
+from .extensions import db
 from sqlalchemy.dialects.postgresql import UUID
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import uuid
-
-db = SQLAlchemy()
 
 # Association table for deck sharing
 deck_shares = db.Table('deck_shares',
