@@ -1,0 +1,175 @@
+{
+  "parts": [
+    {
+      "title": "Part I: Foundations of Econometrics",
+      "chapters": [
+        {
+          "title": "Chapter 1: Introduction to Econometrics",
+          "topics": [
+            {
+              "title": "Definition and Scope of Econometrics",
+              "comment": "Establishes the fundamental understanding of the field",
+              "card_count": 7,
+              "requires_latex": false,
+              "latex_type": null
+            },
+            {
+              "title": "Statistical Concepts in Economics",
+              "comment": "Bridges economics with essential statistical principles",
+              "card_count": 9,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            },
+            {
+              "title": "Economic Data Types and Sources",
+              "comment": "Crucial for understanding the nature of economic information",
+              "card_count": 6,
+              "requires_latex": false,
+              "latex_type": null
+            }
+          ]
+        },
+        {
+          "title": "Chapter 2: Statistical Foundations",
+          "topics": [
+            {
+              "title": "Probability Theory",
+              "comment": "Essential for understanding statistical inference",
+              "card_count": 8,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Descriptive Statistics",
+              "comment": "Fundamental for data summarization and presentation",
+              "card_count": 7,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            },
+            {
+              "title": "Statistical Inference",
+              "comment": "Critical for hypothesis testing and estimation",
+              "card_count": 10,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Part II: Regression Analysis",
+      "chapters": [
+        {
+          "title": "Chapter 3: Simple Linear Regression",
+          "topics": [
+            {
+              "title": "Model Specification",
+              "comment": "Introduces the basic structure of regression models",
+              "card_count": 6,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Ordinary Least Squares Estimation",
+              "comment": "Fundamental method for parameter estimation",
+              "card_count": 9,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Interpretation of Regression Results",
+              "comment": "Essential for applying regression analysis to economic problems",
+              "card_count": 8,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            }
+          ]
+        },
+        {
+          "title": "Chapter 4: Multiple Regression Analysis",
+          "topics": [
+            {
+              "title": "Multiple Regression Model",
+              "comment": "Extends simple regression to multiple variables",
+              "card_count": 7,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Hypothesis Testing in Multiple Regression",
+              "comment": "Critical for assessing variable significance",
+              "card_count": 8,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            },
+            {
+              "title": "Model Diagnostics",
+              "comment": "Ensures the validity of regression assumptions",
+              "card_count": 9,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Part III: Advanced Econometric Methods",
+      "chapters": [
+        {
+          "title": "Chapter 5: Time Series Analysis",
+          "topics": [
+            {
+              "title": "Stationarity and Unit Root Tests",
+              "comment": "Fundamental for understanding time series properties",
+              "card_count": 8,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "ARIMA Models",
+              "comment": "Essential for forecasting economic time series",
+              "card_count": 9,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Cointegration",
+              "comment": "Important for analyzing long-run relationships",
+              "card_count": 7,
+              "requires_latex": true,
+              "latex_type": "statistical"
+            }
+          ]
+        },
+        {
+          "title": "Chapter 6: Panel Data Analysis",
+          "topics": [
+            {
+              "title": "Fixed Effects Models",
+              "comment": "Crucial for controlling unobserved heterogeneity",
+              "card_count": 8,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Random Effects Models",
+              "comment": "Alternative approach to panel data analysis",
+              "card_count": 7,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            },
+            {
+              "title": "Dynamic Panel Models",
+              "comment": "Advanced technique for analyzing temporal dependencies",
+              "card_count": 9,
+              "requires_latex": true,
+              "latex_type": "mathematical"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
