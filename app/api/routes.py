@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, make_response
 from ..models import (
     db, User, Deck, Textbook, Part, Chapter, Topic, Card,
     LiveDeck, UserCardState, StudySession, CardReview,
@@ -12,7 +12,8 @@ from datetime import datetime
 import logging
 from functools import wraps
 import time
-from ..supabase_config import supabase
+from ..supabase_config import supabase, create_access_token, verify_token, require_auth, get_social_auth_url
+import os
 
 api_bp = Blueprint('api', __name__)
 logger = logging.getLogger(__name__)
@@ -37,25 +38,6 @@ def log_api_call(f):
         
         return response
     return decorated_function
-
-def require_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header or not auth_header.startswith('Bearer '):
-            return jsonify({'error': 'No token provided'}), 401
-            
-        token = auth_header.split(' ')[1]
-        try:
-            # Verify the token with Supabase
-            user = supabase.auth.get_user(token)
-            # Get or create user in our database
-            current_user = User.get_or_create_from_supabase(user)
-            return f(current_user, *args, **kwargs)
-        except Exception as e:
-            return jsonify({'error': 'Invalid token'}), 401
-            
-    return decorated
 
 @api_bp.route('/api/test', methods=['GET'])
 def test():
@@ -805,86 +787,4 @@ def get_live_deck_structure(live_deck_id):
         return jsonify(structure)
         
     except Exception as e:
-        return jsonify({"error": str(e)}), 500
-
-@api_bp.route('/api/auth/login', methods=['POST'])
-def login():
-    """Login with Supabase"""
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    
-    if not email or not password:
-        return jsonify({'error': 'Email and password are required'}), 400
-        
-    try:
-        # Authenticate with Supabase
-        auth_response = supabase.auth.sign_in_with_password({
-            'email': email,
-            'password': password
-        })
-        
-        # Get or create user in our database
-        user = User.get_or_create_from_supabase(auth_response.user)
-        user.last_login = datetime.utcnow()
-        db.session.commit()
-        
-        return jsonify({
-            'user': user.to_dict(),
-            'session': auth_response.session
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 401
-
-@api_bp.route('/api/auth/signup', methods=['POST'])
-def signup():
-    """Sign up with Supabase"""
-    data = request.get_json()
-    email = data.get('email')
-    password = data.get('password')
-    username = data.get('username')
-    
-    if not all([email, password, username]):
-        return jsonify({'error': 'Email, password, and username are required'}), 400
-        
-    try:
-        # Sign up with Supabase
-        auth_response = supabase.auth.sign_up({
-            'email': email,
-            'password': password
-        })
-        
-        # Create user in our database
-        user = User(
-            id=auth_response.user.id,
-            email=email,
-            username=username,
-            created_at=datetime.utcnow()
-        )
-        db.session.add(user)
-        db.session.commit()
-        
-        return jsonify({
-            'user': user.to_dict(),
-            'session': auth_response.session
-        })
-        
-    except Exception as e:
-        return jsonify({'error': str(e)}), 400
-
-@api_bp.route('/api/auth/logout', methods=['POST'])
-@require_auth
-def logout(current_user):
-    """Logout from Supabase"""
-    try:
-        supabase.auth.sign_out()
-        return jsonify({'message': 'Logged out successfully'})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-@api_bp.route('/api/auth/me', methods=['GET'])
-@require_auth
-def get_current_user(current_user):
-    """Get current user information"""
-    return jsonify(current_user.to_dict()) 
+        return jsonify({"error": str(e)}), 500 

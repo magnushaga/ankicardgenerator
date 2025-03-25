@@ -1,86 +1,113 @@
 import React, { useState } from 'react'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { SocialAuth } from './SocialAuth'
 import {
-  Box,
-  Button,
-  TextField,
-  Typography,
   Container,
+  Paper,
+  TextField,
+  Button,
+  Typography,
+  Box,
+  Divider,
   Alert,
 } from '@mui/material'
 
-export function LoginForm() {
+export const LoginForm: React.FC = () => {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { signIn } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [error, setError] = useState('')
+  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  const { signIn } = useAuth()
-  const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
+    setLoading(true)
+
     try {
-      setError('')
-      setLoading(true)
       await signIn(email, password)
       navigate('/dashboard')
     } catch (err) {
-      setError('Failed to sign in')
+      setError(err instanceof Error ? err.message : 'An error occurred')
     } finally {
       setLoading(false)
     }
   }
 
   return (
-    <Container component="main" maxWidth="xs">
-      <Box
-        sx={{
-          marginTop: 8,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-        }}
-      >
-        <Typography component="h1" variant="h5">
-          Sign in
-        </Typography>
-        {error && <Alert severity="error">{error}</Alert>}
-        <Box component="form" onSubmit={handleSubmit} sx={{ mt: 1 }}>
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            id="email"
-            label="Email Address"
-            name="email"
-            autoComplete="email"
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+    <Container maxWidth="sm">
+      <Box sx={{ mt: 8 }}>
+        <Paper elevation={3} sx={{ p: 4 }}>
+          <Typography variant="h4" component="h1" gutterBottom align="center">
+            Login
+          </Typography>
+          
+          {location.state?.error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {location.state.error}
+            </Alert>
+          )}
+          
+          {error && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {error}
+            </Alert>
+          )}
+
+          <form onSubmit={handleSubmit}>
+            <TextField
+              fullWidth
+              label="Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              margin="normal"
+              required
+            />
+            <TextField
+              fullWidth
+              label="Password"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              margin="normal"
+              required
+            />
+            <Button
+              type="submit"
+              fullWidth
+              variant="contained"
+              color="primary"
+              disabled={loading}
+              sx={{ mt: 3 }}
+            >
+              {loading ? 'Logging in...' : 'Login'}
+            </Button>
+          </form>
+
+          <Box sx={{ mt: 3, textAlign: 'center' }}>
+            <Typography variant="body2" color="text.secondary">
+              Don't have an account?{' '}
+              <Button
+                color="primary"
+                onClick={() => navigate('/signup')}
+                sx={{ textTransform: 'none' }}
+              >
+                Sign up
+              </Button>
+            </Typography>
+          </Box>
+
+          <Divider sx={{ my: 3 }}>or</Divider>
+
+          <SocialAuth
+            onSuccess={() => navigate('/dashboard')}
+            onError={(err) => setError(err.message)}
           />
-          <TextField
-            margin="normal"
-            required
-            fullWidth
-            name="password"
-            label="Password"
-            type="password"
-            id="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-          <Button
-            type="submit"
-            fullWidth
-            variant="contained"
-            sx={{ mt: 3, mb: 2 }}
-            disabled={loading}
-          >
-            Sign In
-          </Button>
-        </Box>
+        </Paper>
       </Box>
     </Container>
   )

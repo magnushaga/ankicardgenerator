@@ -27,7 +27,7 @@ class User(db.Model):
     
     # Relationships
     decks = db.relationship('Deck', backref='creator', lazy=True)
-    live_decks = db.relationship('LiveDeck', backref='user', lazy=True)
+    live_decks = db.relationship('LiveDeck', backref='owner', lazy=True)
     study_sessions = db.relationship('StudySession', backref='user', lazy=True)
     analytics = db.relationship('LearningAnalytics', backref='user', lazy=True)
     achievements = db.relationship('Achievement', backref='user', lazy=True)
@@ -114,7 +114,6 @@ class LiveDeck(db.Model):
     active_cards = db.Column(db.Integer, default=0)
     
     # Relationships
-    user = db.relationship('User', back_populates='live_decks')
     deck = db.relationship('Deck', back_populates='live_decks')
     card_states = db.relationship('UserCardState', back_populates='live_deck', lazy=True)
 
