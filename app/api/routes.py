@@ -1,14 +1,39 @@
-from flask import Blueprint, request, jsonify
+from flask import Blueprint, request, jsonify, current_app
 from ..models import db, User, Deck, Textbook, Part, Chapter, Topic, Card
 from ..api_backup.api_backup import TextbookAnalyzer
+from sqlalchemy import text
 import uuid
 from datetime import datetime
+import logging
 
 api_bp = Blueprint('api', __name__)
+logger = logging.getLogger(__name__)
 
 @api_bp.route('/api/test', methods=['GET'])
 def test():
-    return jsonify({"message": "API is working!"})
+    logger.info("Test endpoint accessed")
+    try:
+        # Test database connection
+        db.session.execute(text('SELECT 1'))
+        logger.info("Database connection successful")
+        response = {
+            "status": "success",
+            "message": "API is working!",
+            "database": "connected",
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        logger.info(f"Sending response: {response}")
+        return jsonify(response)
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}")
+        response = {
+            "status": "error",
+            "message": "API is working but database connection failed",
+            "error": str(e),
+            "timestamp": datetime.utcnow().isoformat()
+        }
+        logger.error(f"Sending error response: {response}")
+        return jsonify(response), 500
 
 @api_bp.route('/api/generate-deck', methods=['POST'])
 def generate_deck():
