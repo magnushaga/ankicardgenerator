@@ -9,23 +9,41 @@ import sys
 def create_auth_app():
     # Configure logging
     logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        level=logging.DEBUG,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(sys.stdout)
         ]
     )
     
-    # Suppress noisy third-party logs
-    logging.getLogger('werkzeug').setLevel(logging.WARNING)
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('fsevents').setLevel(logging.WARNING)
+    # Set specific loggers to DEBUG level
+    loggers = [
+        'app',
+        'app.api',
+        'app.api.authRoutes',
+        'werkzeug',
+        'urllib3',
+        'fsevents',
+        'flask',
+        'flask_cors'
+    ]
+    
+    for logger_name in loggers:
+        logger = logging.getLogger(logger_name)
+        logger.setLevel(logging.DEBUG)
+        # Ensure the logger has a handler
+        if not logger.handlers:
+            handler = logging.StreamHandler(sys.stdout)
+            handler.setLevel(logging.DEBUG)
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
     
     logger = logging.getLogger(__name__)
-    logger.info("Starting Auth Server...")
+    logger.debug("Starting Auth Server...")
 
     app = Flask(__name__)
-    CORS(app, supports_credentials=True)
+    CORS(app, supports_credentials=True, resources={r"/*": {"origins": "*"}})
     
     # Configure database
     app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL')
@@ -42,7 +60,7 @@ def create_auth_app():
     with app.app_context():
         db.create_all()
     
-    logger.info("Auth Server ready")
+    logger.debug("Auth Server ready")
     return app
 
 if __name__ == '__main__':

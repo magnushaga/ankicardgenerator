@@ -111,10 +111,35 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }
 
   const signOut = async () => {
-    const { error } = await supabase.auth.signOut()
-    if (error) throw error
-    setUser(null)
-    removeStoredToken()
+    try {
+      // First check if we have a session
+      const { data: { session } } = await supabase.auth.getSession()
+      
+      // Clear all storage first
+      localStorage.clear()
+      sessionStorage.clear()
+      removeStoredToken()
+      
+      // If we have a session, try to sign out properly
+      if (session) {
+        const { error } = await supabase.auth.signOut()
+        if (error) {
+          console.error('Error during sign out:', error)
+        }
+      }
+      
+      // Always clear the user state
+      setUser(null)
+      setLoading(false)
+    } catch (error) {
+      console.error('Error during sign out:', error)
+      // Still clear everything even if there's an error
+      localStorage.clear()
+      sessionStorage.clear()
+      removeStoredToken()
+      setUser(null)
+      setLoading(false)
+    }
   }
 
   const signInWithProvider = async (provider: SocialAuthProvider) => {

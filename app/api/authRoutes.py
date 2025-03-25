@@ -6,40 +6,52 @@ import logging
 import os
 import traceback
 
+# Configure logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
+
 # Enable console logging for debugging
 console_logging = True
 
 def debug_print(message, data=None):
     if console_logging:
-        print(f"[DEBUG] {message}")
+        logger.debug(message)
         if data is not None:
-            print(f"[DEBUG] Data: {data}")
+            logger.debug(f"Data: {data}")
 
 auth_bp = Blueprint('auth', __name__)
-logger = logging.getLogger(__name__)
 
 @auth_bp.route('/api/auth/login', methods=['POST'])
 def login():
+    debug_print("=== Starting Login Process ===")
+    debug_print(f"Request method: {request.method}")
+    debug_print(f"Request headers: {dict(request.headers)}")
+    
     try:
         data = request.get_json()
+        debug_print(f"Received login request data: {data}")
+        
         if not data or 'email' not in data or 'password' not in data:
-            logger.warning("Login attempt with missing credentials")
+            debug_print("Login attempt with missing credentials")
             return jsonify({'error': 'Missing email or password'}), 400
 
         # Authenticate with Supabase
+        debug_print("Attempting to authenticate with Supabase")
         auth_response = supabase.auth.sign_in_with_password({
             'email': data['email'],
             'password': data['password']
         })
+        debug_print(f"Supabase auth response: {auth_response}")
 
         if not auth_response.user:
-            logger.warning(f"Failed login attempt for email: {data['email']}")
+            debug_print(f"Failed login attempt for email: {data['email']}")
             return jsonify({'error': 'Invalid credentials'}), 401
 
         # Get or create user profile
+        debug_print("Checking if user exists in database")
         user = User.query.filter_by(id=auth_response.user.id).first()
         if not user:
-            logger.info(f"Creating new user profile for: {data['email']}")
+            debug_print(f"Creating new user profile for: {data['email']}")
             user = User(
                 id=auth_response.user.id,
                 email=data['email'],
@@ -50,11 +62,17 @@ def login():
             )
             db.session.add(user)
             db.session.commit()
+            debug_print(f"Created new user: {user.id}")
+        else:
+            debug_print(f"Found existing user: {user.id}")
 
         # Create JWT token
+        debug_print("Generating JWT token")
         token = create_access_token(user.id)
+        debug_print("JWT token generated successfully")
 
         # Set secure cookie
+        debug_print("Creating response with user data and token")
         response = make_response(jsonify({
             'user': {
                 'id': user.id,
@@ -70,66 +88,86 @@ def login():
             samesite='Lax',
             max_age=3600  # 1 hour
         )
-        logger.info(f"Successful login for user: {user.email}")
+        debug_print("=== Login Process Completed Successfully ===")
         return response
 
     except Exception as e:
-        logger.error(f"Login error for {data.get('email', 'unknown')}: {str(e)}")
+        debug_print(f"Login error: {str(e)}")
+        debug_print(f"Error type: {type(e)}")
+        debug_print(f"Error traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Authentication failed'}), 401
 
 @auth_bp.route('/api/auth/signup', methods=['POST'])
 def signup():
+    debug_print("=== Starting Signup Process ===")
+    debug_print(f"Request method: {request.method}")
+    debug_print(f"Request headers: {dict(request.headers)}")
+    
     try:
         data = request.get_json()
+        debug_print(f"Received signup request data: {data}")
+        
         if not data or 'email' not in data or 'password' not in data:
-            logger.warning("Signup attempt with missing credentials")
+            debug_print("Signup attempt with missing credentials")
             return jsonify({'error': 'Missing email or password'}), 400
 
         # Sign up with Supabase
         try:
-        auth_response = supabase.auth.sign_up({
-            'email': data['email'],
-            'password': data['password'],
-            'options': {
-                'data': {
-                    'username': data.get('username', data['email'].split('@')[0])
+            debug_print("Attempting to sign up with Supabase")
+            auth_response = supabase.auth.sign_up({
+                'email': data['email'],
+                'password': data['password'],
+                'options': {
+                    'data': {
+                        'username': data.get('username', data['email'].split('@')[0])
                     },
                     'email_redirect_to': f"{os.getenv('FRONTEND_URL')}/auth/callback"
-            }
-        })
+                }
+            })
+            debug_print(f"Supabase signup response: {auth_response}")
         except Exception as supabase_error:
-            logger.error(f"Supabase signup error for {data['email']}: {str(supabase_error)}")
+            debug_print(f"Supabase signup error: {str(supabase_error)}")
+            debug_print(f"Error type: {type(supabase_error)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
             return jsonify({'error': f'Failed to create user: {str(supabase_error)}'}), 400
 
         if not auth_response or not auth_response.user:
-            logger.warning(f"Failed signup attempt for email: {data['email']} - No user returned")
+            debug_print(f"Failed signup attempt for email: {data['email']} - No user returned")
             return jsonify({'error': 'Failed to create user - No user returned'}), 400
 
         # Create user profile
         try:
-        user = User(
-            id=auth_response.user.id,
-            email=data['email'],
-            username=data.get('username', data['email'].split('@')[0]),
-            created_at=datetime.utcnow(),
-            last_login=datetime.utcnow(),
-            is_active=True
-        )
-        db.session.add(user)
-        db.session.commit()
+            debug_print("Creating user profile in database")
+            user = User(
+                id=auth_response.user.id,
+                email=data['email'],
+                username=data.get('username', data['email'].split('@')[0]),
+                created_at=datetime.utcnow(),
+                last_login=datetime.utcnow(),
+                is_active=True
+            )
+            db.session.add(user)
+            db.session.commit()
+            debug_print(f"Created user profile: {user.id}")
         except Exception as db_error:
-            logger.error(f"Database error during signup for {data['email']}: {str(db_error)}")
+            debug_print(f"Database error during signup: {str(db_error)}")
+            debug_print(f"Error type: {type(db_error)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
             # Attempt to clean up the Supabase user if database fails
             try:
+                debug_print("Attempting to cleanup Supabase user after DB error")
                 supabase.auth.admin.delete_user(auth_response.user.id)
             except Exception as cleanup_error:
-                logger.error(f"Failed to cleanup Supabase user after DB error: {str(cleanup_error)}")
+                debug_print(f"Failed to cleanup Supabase user: {str(cleanup_error)}")
             return jsonify({'error': 'Failed to create user profile'}), 500
 
         # Create JWT token
+        debug_print("Generating JWT token")
         token = create_access_token(user.id)
+        debug_print("JWT token generated successfully")
 
         # Set secure cookie
+        debug_print("Creating response with user data and token")
         response = make_response(jsonify({
             'user': {
                 'id': user.id,
@@ -145,11 +183,13 @@ def signup():
             samesite='Lax',
             max_age=3600  # 1 hour
         )
-        logger.info(f"New user registered: {user.email}")
+        debug_print("=== Signup Process Completed Successfully ===")
         return response
 
     except Exception as e:
-        logger.error(f"Signup error for {data.get('email', 'unknown')}: {str(e)}")
+        debug_print(f"Signup error: {str(e)}")
+        debug_print(f"Error type: {type(e)}")
+        debug_print(f"Error traceback: {traceback.format_exc()}")
         return jsonify({'error': 'Failed to create account'}), 400
 
 @auth_bp.route('/api/auth/logout', methods=['POST'])
@@ -174,11 +214,12 @@ def get_current_user():
     debug_print("=== Starting get_current_user endpoint ===")
     debug_print(f"Request method: {request.method}")
     debug_print(f"Request headers: {dict(request.headers)}")
+    debug_print(f"Request origin: {request.headers.get('Origin')}")
     
     if request.method == 'OPTIONS':
         debug_print("Handling OPTIONS request")
         response = make_response()
-        response.headers['Access-Control-Allow-Origin'] = os.getenv('FRONTEND_URL', 'http://localhost:5173')
+        response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'http://localhost:5173')
         response.headers['Access-Control-Allow-Credentials'] = 'true'
         response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
         response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
@@ -186,25 +227,74 @@ def get_current_user():
         
     try:
         debug_print("Attempting to get user from token")
-        user = get_user_from_token()
+        auth_header = request.headers.get('Authorization')
+        debug_print(f"Authorization header: {auth_header}")
         
-        if not user:
-            debug_print("No user found from token")
-            return jsonify({'error': 'Unauthorized'}), 401
+        if not auth_header or not auth_header.startswith('Bearer '):
+            debug_print("No valid token provided")
+            return jsonify({'error': 'No valid token provided'}), 401
+        
+        token = auth_header.split(' ')[1]
+        debug_print("Token extracted from header")
+        
+        # Verify token with Supabase
+        try:
+            debug_print("Verifying token with Supabase")
+            user = supabase.auth.get_user(token)
+            debug_print(f"Supabase user data: {user}")
             
-        debug_print(f"Successfully retrieved user: {user.to_dict()}")
+            if not user:
+                debug_print("Invalid token - no user returned from Supabase")
+                return jsonify({'error': 'Invalid token'}), 401
+        except Exception as e:
+            debug_print(f"Error verifying token with Supabase: {str(e)}")
+            debug_print(f"Error type: {type(e)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
+            return jsonify({'error': 'Failed to verify token'}), 401
         
-        response = make_response(jsonify(user.to_dict()))
-        
-        # Set CORS headers
-        response.headers['Access-Control-Allow-Origin'] = os.getenv('FRONTEND_URL', 'http://localhost:5173')
-        response.headers['Access-Control-Allow-Credentials'] = 'true'
-        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
-        response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
-        
-        debug_print("=== get_current_user endpoint completed successfully ===")
-        return response
-
+        # Get user from our database
+        try:
+            debug_print(f"Looking up user in database with ID: {user.id}")
+            db_user = User.query.get(user.id)
+            if not db_user:
+                debug_print(f"User not found in database: {user.id}")
+                # Create user if not found
+                db_user = User(
+                    id=user.id,
+                    email=user.email,
+                    username=user.user_metadata.get('username', user.email.split('@')[0]),
+                    created_at=datetime.utcnow(),
+                    last_login=datetime.utcnow(),
+                    is_active=True
+                )
+                db.session.add(db_user)
+                db.session.commit()
+                debug_print(f"Created new user in database: {db_user.id}")
+            else:
+                debug_print(f"User found in database: {db_user.id}")
+                # Update last login
+                db_user.last_login = datetime.utcnow()
+                db.session.commit()
+            
+            debug_print(f"User data: {db_user.to_dict()}")
+            
+            response = make_response(jsonify(db_user.to_dict()))
+            
+            # Set CORS headers
+            response.headers['Access-Control-Allow-Origin'] = request.headers.get('Origin', 'http://localhost:5173')
+            response.headers['Access-Control-Allow-Credentials'] = 'true'
+            response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
+            response.headers['Access-Control-Allow-Methods'] = 'GET, OPTIONS'
+            
+            debug_print("=== get_current_user endpoint completed successfully ===")
+            return response
+            
+        except Exception as e:
+            debug_print(f"Error retrieving user from database: {str(e)}")
+            debug_print(f"Error type: {type(e)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
+            return jsonify({'error': 'Failed to get user data'}), 500
+            
     except Exception as e:
         debug_print(f"Error in get_current_user: {str(e)}")
         debug_print(f"Error type: {type(e)}")
@@ -239,10 +329,12 @@ def oauth_callback():
         # Exchange the code for a session
         try:
             debug_print("Attempting to exchange code for session with Supabase")
-        session = supabase.auth.exchange_code_for_session(data['code'])
+            session = supabase.auth.exchange_code_for_session(data['code'])
             debug_print(f"Successfully exchanged code for session: {session}")
         except Exception as e:
             debug_print(f"Error exchanging code for session: {str(e)}")
+            debug_print(f"Error type: {type(e)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
             return jsonify({'error': 'Failed to exchange code for session'}), 400
         
         if not session or not session.user:
@@ -259,6 +351,8 @@ def oauth_callback():
             debug_print(f"User details: {user.to_dict()}")
         except Exception as e:
             debug_print(f"Error creating/retrieving user: {str(e)}")
+            debug_print(f"Error type: {type(e)}")
+            debug_print(f"Error traceback: {traceback.format_exc()}")
             return jsonify({'error': 'Failed to create user'}), 500
         
         # Generate JWT token

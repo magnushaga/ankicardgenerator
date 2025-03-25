@@ -25,33 +25,162 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     flowType: 'pkce',
     storage: {
       getItem: (key) => {
-        const item = localStorage.getItem(key)
-        return item ? JSON.parse(item) : null
+        try {
+          const item = localStorage.getItem(key)
+          return item ? JSON.parse(item) : null
+        } catch (error) {
+          console.error('Error reading from localStorage:', error)
+          return null
+        }
       },
       setItem: (key, value) => {
-        localStorage.setItem(key, JSON.stringify(value))
+        try {
+          localStorage.setItem(key, JSON.stringify(value))
+        } catch (error) {
+          console.error('Error writing to localStorage:', error)
+        }
       },
       removeItem: (key) => {
-        localStorage.removeItem(key)
+        try {
+          localStorage.removeItem(key)
+        } catch (error) {
+          console.error('Error removing from localStorage:', error)
+        }
       },
     },
   },
 })
 
+// Initialize auth state
+let isInitialized = false
+let currentUser: UserInfo | null = null
+
 // Add session listener
-supabase.auth.onAuthStateChange((event, session) => {
-  console.log('Auth state changed:', event, session)
+supabase.auth.onAuthStateChange(async (event, session) => {
+  console.log('Auth state changed:', event)
+  
   if (event === 'SIGNED_IN') {
-    console.log('User signed in:', session?.user)
-    // Store the access token
-    if (session?.access_token) {
-      localStorage.setItem('access_token', session.access_token)
+    if (!isInitialized && session?.user) {
+      console.log('Initializing user data from session')
+      try {
+        // Create initial user data from session
+        const user = session.user
+        const metadata = user.user_metadata || {}
+        
+        currentUser = {
+          id: user.id,
+          email: user.email || '',
+          username: metadata.username || metadata.full_name || user.email?.split('@')[0] || '',
+          created_at: user.created_at || new Date().toISOString(),
+          updated_at: user.updated_at || new Date().toISOString(),
+          last_login: user.last_sign_in_at || null,
+          is_active: true,
+          preferred_study_time: undefined,
+          notification_preferences: undefined,
+          study_goals: undefined
+        }
+
+        // Store the access token
+        if (session.access_token) {
+          localStorage.setItem('access_token', session.access_token)
+        }
+
+        // Sync with backend in background
+        syncUserWithBackend(currentUser, session.access_token).catch(error => {
+          console.warn('Background sync failed:', error)
+        })
+
+        isInitialized = true
+      } catch (error) {
+        console.error('Error initializing user data:', error)
+      }
     }
   } else if (event === 'SIGNED_OUT') {
     console.log('User signed out')
     localStorage.removeItem('access_token')
+    currentUser = null
+    isInitialized = false
   }
 })
+
+// Separate sync function
+async function syncUserWithBackend(userData: UserInfo, token: string): Promise<UserInfo> {
+  const apiUrl = `${backendUrl}/api/auth/me`
+  console.log('Syncing with backend:', apiUrl)
+
+  const response = await fetch(apiUrl, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      'Accept': 'application/json'
+    },
+    body: JSON.stringify(userData),
+    credentials: 'include',
+    mode: 'cors'
+  })
+
+  if (!response.ok) {
+    const errorText = await response.text()
+    throw new Error(`Backend sync failed: ${errorText}`)
+  }
+
+  const syncedUser = await response.json()
+  console.log('Successfully synced with backend:', syncedUser)
+  currentUser = syncedUser
+  return syncedUser
+}
+
+export async function getUserInfo(): Promise<UserInfo> {
+  console.log('Getting user info')
+  
+  // If we already have the user data, return it
+  if (currentUser) {
+    console.log('Returning cached user data:', currentUser)
+    return currentUser
+  }
+
+  // Otherwise, get the current session
+  const { data: { session } } = await supabase.auth.getSession()
+  
+  if (!session?.user) {
+    console.error('No active session')
+    throw new Error('No active session')
+  }
+
+  // Initialize user data if needed
+  if (!isInitialized) {
+    const user = session.user
+    const metadata = user.user_metadata || {}
+    
+    currentUser = {
+      id: user.id,
+      email: user.email || '',
+      username: metadata.username || metadata.full_name || user.email?.split('@')[0] || '',
+      created_at: user.created_at || new Date().toISOString(),
+      updated_at: user.updated_at || new Date().toISOString(),
+      last_login: user.last_sign_in_at || null,
+      is_active: true,
+      preferred_study_time: undefined,
+      notification_preferences: undefined,
+      study_goals: undefined
+    }
+
+    try {
+      // Sync with backend
+      await syncUserWithBackend(currentUser, session.access_token)
+      isInitialized = true
+    } catch (error) {
+      console.warn('Backend sync failed, using Supabase data:', error)
+    }
+  }
+
+  if (!currentUser) {
+    throw new Error('Failed to initialize user data')
+  }
+
+  return currentUser
+}
 
 export type User = {
   id: string
@@ -81,6 +210,7 @@ export const signInWithProvider = async (provider: SocialAuthProvider) => {
           access_type: 'offline',
           prompt: 'consent',
         },
+        skipBrowserRedirect: true // Prevent automatic redirect
       },
     })
 
@@ -92,6 +222,12 @@ export const signInWithProvider = async (provider: SocialAuthProvider) => {
     if (!data?.url) {
       console.error('No URL returned from OAuth sign in')
       throw new Error('No URL returned from OAuth sign in')
+    }
+
+    // Store the code verifier in session storage
+    const codeVerifier = localStorage.getItem('supabase-code-verifier')
+    if (codeVerifier) {
+      sessionStorage.setItem('code_verifier', codeVerifier)
     }
 
     console.log('Redirecting to provider URL:', data.url)
@@ -113,29 +249,67 @@ export const handleAuthCallback = async () => {
     if (!code) {
       throw new Error('No authorization code found')
     }
+
+    // Get the code verifier from session storage
+    const codeVerifier = sessionStorage.getItem('code_verifier')
+    console.log('Retrieved code verifier:', codeVerifier ? 'present' : 'missing')
+    
+    if (!codeVerifier) {
+      throw new Error('No code verifier found in session storage')
+    }
     
     // Exchange the code for a session
-    const { data: { session }, error } = await supabase.auth.exchangeCodeForSession(code)
+    console.log('Exchanging code for session with code verifier')
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code)
     
     if (error) {
       console.error('Error exchanging code for session:', error)
       throw error
     }
     
-    if (!session) {
+    if (!data.session) {
       console.error('No session found')
       throw new Error('No session found')
     }
 
     // Store the access token
-    if (session.access_token) {
-      localStorage.setItem('access_token', session.access_token)
+    if (data.session.access_token) {
+      localStorage.setItem('access_token', data.session.access_token)
     }
     
-    console.log('Auth callback successful:', session)
-    return { session }
+    // Clean up the code verifier
+    sessionStorage.removeItem('code_verifier')
+    
+    console.log('Auth callback successful:', data.session)
+    return { session: data.session }
   } catch (error) {
     console.error('Error handling auth callback:', error)
+    // Clean up on error
+    sessionStorage.removeItem('code_verifier')
+    throw error
+  }
+}
+
+// Add a function to check if we're in a callback
+export const isAuthCallback = () => {
+  const params = new URLSearchParams(window.location.search)
+  return params.has('code')
+}
+
+// Add a function to handle initial auth state
+export const initializeAuth = async () => {
+  try {
+    // If we're in a callback, handle it
+    if (isAuthCallback()) {
+      return handleAuthCallback()
+    }
+    
+    // Otherwise, try to recover the session
+    const { data: { session }, error } = await supabase.auth.getSession()
+    if (error) throw error
+    return { session }
+  } catch (error) {
+    console.error('Error initializing auth:', error)
     throw error
   }
 }
@@ -151,117 +325,6 @@ interface UserInfo {
   preferred_study_time?: string
   notification_preferences?: any
   study_goals?: any
-}
-
-export async function getUserInfo(): Promise<UserInfo> {
-  try {
-    console.log('Starting getUserInfo')
-    
-    // Get the current session
-    const { data: { session }, error: sessionError } = await supabase.auth.getSession()
-    if (sessionError) {
-      console.error('Error getting session:', sessionError)
-      throw sessionError
-    }
-    
-    if (!session) {
-      console.error('No active session found')
-      throw new Error('No active session')
-    }
-
-    console.log('Got session:', session)
-    console.log('Session access token:', session.access_token)
-
-    // First try to get user info from our backend
-    const apiUrl = `${backendUrl}/api/auth/me`
-    console.log('Fetching user info from backend:', apiUrl)
-    
-    try {
-      const response = await fetch(apiUrl, {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        credentials: 'include'
-      })
-
-      console.log('Backend response status:', response.status)
-      console.log('Backend response headers:', Object.fromEntries(response.headers.entries()))
-
-      if (response.ok) {
-        const userData = await response.json()
-        console.log('Got user data from backend:', userData)
-        return userData
-      }
-
-      const errorText = await response.text()
-      console.error('Backend request failed:', {
-        status: response.status,
-        statusText: response.statusText,
-        error: errorText
-      })
-    } catch (fetchError) {
-      console.error('Error fetching from backend:', fetchError)
-    }
-    
-    // If backend request fails, create a user profile from Supabase data
-    const supabaseUser = session.user
-    console.log('Creating user from Supabase data:', supabaseUser)
-    
-    const userData: UserInfo = {
-      id: supabaseUser.id,
-      email: supabaseUser.email || '',
-      username: supabaseUser.user_metadata?.username || supabaseUser.email?.split('@')[0] || '',
-      created_at: supabaseUser.created_at || new Date().toISOString(),
-      updated_at: supabaseUser.updated_at || new Date().toISOString(),
-      last_login: supabaseUser.last_sign_in_at || null,
-      is_active: true,
-      preferred_study_time: undefined,
-      notification_preferences: undefined,
-      study_goals: undefined
-    }
-
-    console.log('Created user data from Supabase:', userData)
-
-    // Try to create/update the user in our backend
-    try {
-      console.log('Attempting to create/update user in backend')
-      const createResponse = await fetch(apiUrl, {
-    method: 'POST',
-    headers: {
-          'Authorization': `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(userData),
-        credentials: 'include'
-      })
-
-      console.log('Create/update response status:', createResponse.status)
-      
-      if (createResponse.ok) {
-        const createdUser = await createResponse.json()
-        console.log('Successfully created/updated user in backend:', createdUser)
-        return createdUser
-      } else {
-        const errorText = await createResponse.text()
-        console.error('Failed to create/update user in backend:', {
-          status: createResponse.status,
-          statusText: createResponse.statusText,
-          error: errorText
-        })
-      }
-    } catch (error) {
-      console.error('Error creating user profile:', error)
-    }
-
-    // If all else fails, return the basic user data
-    console.log('Returning basic user data')
-    return userData
-  } catch (error) {
-    console.error('Error in getUserInfo:', error)
-    throw error
-  }
 }
 
 export const getStoredToken = () => {
