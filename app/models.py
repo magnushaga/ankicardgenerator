@@ -165,7 +165,6 @@ class TextbookReview(db.Model):
     # Change this to use backref instead of back_populates
     textbook = db.relationship('Textbook', backref='reviews')
     user = db.relationship('User', backref='textbook_reviews')
-
 class Textbook(db.Model):
     __tablename__ = 'textbooks'
     
