@@ -142,4 +142,40 @@ def get_textbooks():
             'subject': textbook.subject
         } for textbook in textbooks])
     except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+@api_bp.route('/api/search-decks', methods=['GET'])
+def search_decks():
+    """Search for decks by title and return with cards"""
+    query = request.args.get('q', '')
+    
+    try:
+        decks = Deck.query.filter(Deck.title.ilike(f'%{query}%')).all()
+        
+        result = []
+        for deck in decks:
+            cards = []
+            # Get all cards from the deck structure
+            for part in deck.parts:
+                for chapter in part.chapters:
+                    for topic in chapter.topics:
+                        topic_cards = Card.query.filter_by(topic_id=topic.id).all()
+                        cards.extend([{
+                            'id': str(card.id),
+                            'front': card.front,
+                            'back': card.back,
+                            'partTitle': part.title,
+                            'chapterTitle': chapter.title,
+                            'topicTitle': topic.title
+                        } for card in topic_cards])
+            
+            result.append({
+                'id': str(deck.id),
+                'title': deck.title,
+                'cards': cards
+            })
+        
+        return jsonify(result)
+        
+    except Exception as e:
         return jsonify({"error": str(e)}), 500 
