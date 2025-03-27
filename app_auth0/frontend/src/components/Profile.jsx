@@ -1,66 +1,101 @@
-import React, { useEffect, useState } from "react";
-import { useLocation } from "react-router-dom";
-import { Container, Typography, Avatar, Box, Button, CircularProgress } from "@mui/material";
-import { styled } from "@mui/material/styles";
+import React, { useState, useEffect } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 
-const StyledContainer = styled(Container)(({ theme }) => ({
-  display: "flex",
-  flexDirection: "column",
-  alignItems: "center",
-  justifyContent: "center",
-  height: "100vh",
-  textAlign: "center",
-  padding: theme.spacing(3),
-}));
-
-const Profile = () => {
-  const [user, setUser] = useState(null);
-  const [tokenPayload, setTokenPayload] = useState(null);
-  const [loading, setLoading] = useState(true);
+function Profile() {
+  const [userInfo, setUserInfo] = useState(null);
+  const [tokens, setTokens] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const location = useLocation();
+  const navigate = useNavigate();
 
-  const userVisualDetails = async (token) => {
-    try {
-      const response = await fetch("http://localhost:5001/userinfo", {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
-      
-      if (response.ok) {
-        const userData = await response.json();
-        return { name: userData.name, picture: userData.picture, email: userData.email };
+  useEffect(() => {
+    const urlParams = new URLSearchParams(location.search);
+    const code = urlParams.get("code");
+
+    if (code) {
+      // Only exchange code if we haven't already processed it
+      const processedCode = sessionStorage.getItem("processed_code");
+      if (code !== processedCode) {
+        sessionStorage.setItem("processed_code", code);
+        exchangeCodeForToken(code);
       }
-      return { name: null, picture: null };
-    } catch (error) {
-      console.error("Error fetching user details:", error);
-      return { name: null, picture: null };
+      // Clean up the URL after processing the code
+      navigate('/profile', { replace: true });
     }
+  }, [location, navigate]);
+
+  const clearAllData = () => {
+    // Clear all stored data
+    sessionStorage.removeItem("processed_code");
+    sessionStorage.removeItem("access_token");
+    sessionStorage.removeItem("id_token");
+    localStorage.removeItem("user_info");
+    localStorage.removeItem("tokens");
+    setUserInfo(null);
+    setTokens(null);
+    setError(null);
   };
 
-  const extractPayloadFromToken = (token) => {
+  const handleLogin = async () => {
     try {
-      const payloadBase64 = token.split('.')[1];
-      return JSON.parse(atob(payloadBase64));
+      setIsLoading(true);
+      setError(null);
+      const response = await fetch("http://localhost:5001/login");
+      const data = await response.json();
+      
+      if (data.auth_url) {
+        window.location.href = data.auth_url;
+      }
     } catch (error) {
-      console.error("Error extracting payload:", error);
-      return null;
+      setError("Error starting login process");
+      console.error("Error:", error);
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const fetchUserInfo = async (token) => {
-    setLoading(true);
-    const visualDetails = await userVisualDetails(token);
-    const decodedPayload = extractPayloadFromToken(token);
+  const handleLogout = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
 
-    setUser(visualDetails);
-    setTokenPayload(decodedPayload);
-    setLoading(false);
+      // Clear local application data first
+      clearAllData();
+
+      // Call backend logout endpoint
+      const response = await fetch('http://localhost:5001/logout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          returnTo: 'http://localhost:5173'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Logout failed');
+      }
+
+      const data = await response.json();
+
+      // Redirect to Auth0 logout URL (will only log out of Auth0, not Google)
+      if (data.logout_url) {
+        window.location.href = data.logout_url;
+      }
+    } catch (error) {
+      setError('Error during logout');
+      console.error('Logout error:', error);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const exchangeCodeForToken = async (code) => {
     try {
-      console.log("Starting code exchange...");
+      setIsLoading(true);
+      setError(null);
       const response = await fetch("http://localhost:5001/callback", {
         method: "POST",
         headers: {
@@ -70,126 +105,173 @@ const Profile = () => {
           code,
           redirect_uri: "http://localhost:5173/profile",
         }),
-        credentials: 'include'
       });
 
-      console.log("Response status:", response.status);
-      const data = await response.json();
-      console.log("Response data:", data);
-
-      if (response.ok) {
-        const { access_token } = data;
-        if (!access_token) {
-          throw new Error("No access token received");
-        }
-        sessionStorage.setItem("access_token", access_token);
-        await fetchUserInfo(access_token);
-      } else {
-        throw new Error(data.error || "Failed to exchange code for token");
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to exchange code for token");
       }
+
+      const data = await response.json();
+      
+      // Store tokens and user info
+      setTokens(data.tokens);
+      setUserInfo(data.user);
+      
+      // Store in session/local storage
+      sessionStorage.setItem("access_token", data.tokens.access_token);
+      sessionStorage.setItem("id_token", data.tokens.id_token);
+      localStorage.setItem("user_info", JSON.stringify(data.user));
+      localStorage.setItem("tokens", JSON.stringify(data.tokens));
     } catch (error) {
-      console.error("Error exchanging code:", error);
-      // You might want to show this error to the user
+      console.error("Error:", error);
+      setError(error.message);
+      clearAllData();
+    } finally {
+      setIsLoading(false);
     }
-  };
-
-  const handleLogout = () => {
-    const domain = import.meta.env.VITE_AUTH0_DOMAIN;
-    const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID;
-    const returnTo = "http://localhost:5173";
-
-    sessionStorage.removeItem("access_token");
-    window.location.href = `https://${domain}/v2/logout?client_id=${clientId}&returnTo=${returnTo}`;
-  };
-
-  const handleLogin = () => {
-    const domain = import.meta.env.VITE_AUTH0_DOMAIN;
-    const clientId = import.meta.env.VITE_AUTH0_CLIENT_ID;
-    const redirectUri = encodeURIComponent("http://localhost:5173/profile");
-    const audience = encodeURIComponent("http://localhost:5000/api");
-    const scope = encodeURIComponent("openid profile email");
-
-    const authUrl = `https://${domain}/authorize?`
-      + `response_type=code`
-      + `&client_id=${clientId}`
-      + `&redirect_uri=${redirectUri}`
-      + `&audience=${audience}`
-      + `&scope=${scope}`;
-
-    window.location.href = authUrl;
   };
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const code = urlParams.get("code");
-
-    if (code) {
-      exchangeCodeForToken(code);
-    } else {
-      const token = sessionStorage.getItem("access_token");
-      if (token) {
-        fetchUserInfo(token);
-      } else {
-        setLoading(false);
-      }
+    const savedUserInfo = localStorage.getItem("user_info");
+    const savedTokens = localStorage.getItem("tokens");
+    if (savedUserInfo && savedTokens) {
+      setUserInfo(JSON.parse(savedUserInfo));
+      setTokens(JSON.parse(savedTokens));
     }
-  }, [location.search]);
+  }, []);
 
-  if (loading) {
-    return (
-      <StyledContainer>
-        <CircularProgress />
-      </StyledContainer>
-    );
-  }
+  const formatJWT = (token) => {
+    if (!token) return null;
+    const [header, payload, signature] = token.split('.');
+    try {
+      return {
+        header: JSON.parse(atob(header)),
+        payload: JSON.parse(atob(payload)),
+        signature: signature
+      };
+    } catch (e) {
+      return { raw: token };
+    }
+  };
 
-  if (!user) {
-    return (
-      <StyledContainer>
-        <Typography variant="h5" gutterBottom>
-          Welcome to StudyQuant
-        </Typography>
-        <Button
-          variant="contained"
-          color="primary"
-          onClick={handleLogin}
-        >
-          Log In
-        </Button>
-      </StyledContainer>
-    );
+  if (isLoading) {
+    return <div>Loading...</div>;
   }
 
   return (
-    <StyledContainer>
-      <Avatar
-        alt={user.name || "User"}
-        src={user.picture}
-        sx={{ width: 120, height: 120, mb: 2 }}
-      />
-      <Typography variant="h4" gutterBottom>
-        Welcome, {user.name}!
-      </Typography>
-      <Typography variant="body1" gutterBottom>
-        {user.email}
-      </Typography>
-      <Box mt={3}>
-        <Button variant="contained" color="error" onClick={handleLogout}>
-          Log Out
-        </Button>
-      </Box>
-      {tokenPayload && (
-        <Box mt={3}>
-          <Typography variant="h6" gutterBottom>
-            Token Information:
-          </Typography>
-          <pre style={{ textAlign: 'left' }}>
-            {JSON.stringify(tokenPayload, null, 2)}
-          </pre>
-        </Box>
+    <div style={{ 
+      padding: '20px',
+      maxWidth: '800px',
+      margin: '0 auto',
+      fontFamily: 'Arial, sans-serif'
+    }}>
+      {error && (
+        <div style={{ color: 'red', marginBottom: '20px' }}>
+          {error}
+        </div>
       )}
-    </StyledContainer>
+      
+      {userInfo ? (
+        <div>
+          {/* Profile Header */}
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '20px',
+            marginBottom: '30px',
+            padding: '20px',
+            backgroundColor: '#f8f9fa',
+            borderRadius: '10px'
+          }}>
+            {userInfo.picture && (
+              <img 
+                src={userInfo.picture} 
+                alt="Profile" 
+                style={{ 
+                  width: '100px', 
+                  height: '100px', 
+                  borderRadius: '50%',
+                  objectFit: 'cover',
+                  border: '3px solid white',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+                }} 
+              />
+            )}
+            <div>
+              <h1 style={{ margin: '0 0 10px 0' }}>{userInfo.name}</h1>
+              <p style={{ margin: '0', color: '#666' }}>{userInfo.email}</p>
+            </div>
+          </div>
+
+          {/* User Info Section */}
+          <div style={{ marginBottom: '20px' }}>
+            <h2>User Information</h2>
+            <pre style={{ 
+              backgroundColor: '#f8f9fa',
+              padding: '15px',
+              borderRadius: '5px',
+              overflow: 'auto',
+              fontSize: '14px'
+            }}>
+              {JSON.stringify(userInfo, null, 2)}
+            </pre>
+          </div>
+
+          {/* JWT Token Section */}
+          {tokens && (
+            <div style={{ marginBottom: '20px' }}>
+              <h2>Token Information</h2>
+              <pre style={{ 
+                backgroundColor: '#f8f9fa',
+                padding: '15px',
+                borderRadius: '5px',
+                overflow: 'auto',
+                fontSize: '14px'
+              }}>
+                {JSON.stringify(tokens, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          <button 
+            onClick={handleLogout}
+            disabled={isLoading}
+            style={{
+              padding: '10px 20px',
+              backgroundColor: '#dc3545',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px'
+            }}
+          >
+            {isLoading ? 'Logging out...' : 'Logout'}
+          </button>
+        </div>
+      ) : (
+        <div style={{ textAlign: 'center', marginTop: '50px' }}>
+          <button 
+            onClick={handleLogin}
+            disabled={isLoading}
+            style={{
+              padding: '12px 24px',
+              backgroundColor: '#007bff',
+              color: 'white',
+              border: 'none',
+              borderRadius: '5px',
+              cursor: 'pointer',
+              fontSize: '16px',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+          >
+            {isLoading ? 'Logging in...' : 'Login with Auth0'}
+          </button>
+        </div>
+      )}
+    </div>
   );
-};
+}
 
 export default Profile; 
