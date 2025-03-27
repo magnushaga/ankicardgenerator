@@ -46,6 +46,21 @@ class User(UserMixin, db.Model):
             'preferences': self.preferences
         }
 
+class Course(db.Model):
+    __tablename__ = 'courses'
+    
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey('users.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text)
+    content = db.Column(db.Text)  # Course content (e.g., lecture notes)
+    attachments = db.Column(db.JSON, default=list)  # List of file paths for course attachments
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    topics = db.relationship('Topic', backref='course', lazy=True, cascade='all, delete-orphan')
+    decks = db.relationship('Deck', backref='course', lazy=True, cascade='all, delete-orphan')
+
 class Textbook(db.Model):
     __tablename__ = 'textbooks'
     
