@@ -5,6 +5,8 @@ from .models import db
 import os
 import logging
 import sys
+from urllib.parse import quote_plus
+import psycopg2
 
 def create_auth_app():
     # Configure logging
@@ -57,12 +59,37 @@ def create_auth_app():
     app.register_blueprint(auth_bp)
     
     # Create database tables
-    with app.app_context():
-        db.create_all()
+    try:
+        db_url = os.getenv('DATABASE_URL')
+        logger.debug(f"Attempting to connect to database at: {db_url.split('@')[1].split('/')[0]}")
+        with app.app_context():
+            db.create_all()
+    except Exception as e:
+        logger.error(f"Database connection error: {str(e)}")
+        # Continue without database for testing
+        pass
+    
+    logger.debug("Database URL format check:")
+    db_url = os.getenv('DATABASE_URL')
+    logger.debug(f"- Contains postgres:// prefix: {'postgres://' in db_url}")
+    logger.debug(f"- Contains correct host: {'db.wxisvjmhokwtjwcqaarb.supabase.co' in db_url}")
+    logger.debug(f"- Contains encoded @ in password: {'%40' in db_url}")
     
     logger.debug("Auth Server ready")
     return app
 
 if __name__ == '__main__':
     app = create_auth_app()
-    app.run(host='0.0.0.0', port=5001, debug=True) 
+    app.run(host='0.0.0.0', port=5001, debug=True)
+
+password = "H@ukerkul120700"
+encoded_password = quote_plus(password)
+print(f"postgresql://postgres:{encoded_password}@db.wxisvjmhokwtjwcqaarb.supabase.co:5432/postgres")
+
+try:
+    conn = psycopg2.connect(
+        "dbname=postgres user=postgres password=H@ukerkul120700 host=aws-0-eu-central-1.pooler.supabase.com"
+    )
+    print("Connection successful!")
+except Exception as e:
+    print(f"Connection failed: {e}") 
