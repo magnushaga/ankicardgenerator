@@ -1,12 +1,14 @@
 from flask import Flask
 from flask_cors import CORS
-from .extensions import db
+from .api.routes import api_bp
+from .models import db
+from .supabase_config import supabase
 import os
 import logging
 import sys
 from .config import Config
 
-def create_app():
+def create_app(config_class=Config):
     # Configure logging
     logging.basicConfig(
         level=logging.DEBUG,
@@ -21,11 +23,18 @@ def create_app():
     app = Flask(__name__)
     
     # Load configuration
-    app.config.from_object(Config)
+    app.config.from_object(config_class)
     logger.info("Configuration loaded successfully")
     
     # Initialize CORS
-    CORS(app)
+    CORS(app, resources={
+        r"/api/*": {
+            "origins": [os.getenv('FRONTEND_URL', 'http://localhost:5173')],
+            "supports_credentials": True,
+            "allow_headers": ["Content-Type", "Authorization"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
+        }
+    })
     logger.info("CORS initialized")
     
     # Initialize extensions
@@ -34,7 +43,6 @@ def create_app():
     
     # Import and register blueprints
     try:
-        from .api.routes import api_bp
         app.register_blueprint(api_bp)
         logger.info("API blueprint registered successfully")
     except Exception as e:
@@ -61,4 +69,4 @@ ctx = app.app_context()
 ctx.push()
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5001) 
+    app.run(host='0.0.0.0', port=5000, debug=True) 
