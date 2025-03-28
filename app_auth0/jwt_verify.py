@@ -5,25 +5,16 @@ from flask import request, jsonify
 import logging
 from cachetools import TTLCache
 import json
-import os
-from dotenv import load_dotenv
-
-# Load environment variables
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
 # Cache the JWKS data for 1 hour to avoid frequent HTTP requests
 jwks_cache = TTLCache(maxsize=1, ttl=3600)
 
-# Get Auth0 configuration from environment variables
-AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN")
-AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "http://localhost:5002/api")
-
 def get_jwks():
     """Fetch and cache the JWKS from Auth0"""
     if 'jwks' not in jwks_cache:
-        jwks_url = f"https://{AUTH0_DOMAIN}/.well-known/jwks.json"
+        jwks_url = "https://dev-pv6ho0i8drbnbp6l.eu.auth0.com/.well-known/jwks.json"
         try:
             jwks = requests.get(jwks_url).json()
             jwks_cache['jwks'] = jwks
@@ -67,8 +58,8 @@ def verify_jwt(token):
                 token,
                 rsa_key,
                 algorithms=["RS256"],
-                audience=AUTH0_AUDIENCE,
-                issuer=f"https://{AUTH0_DOMAIN}/"
+                audience="http://localhost:5002/api",  # Your API identifier
+                issuer=f"https://dev-pv6ho0i8drbnbp6l.eu.auth0.com/"
             )
             return payload
         except jwt.ExpiredSignatureError:

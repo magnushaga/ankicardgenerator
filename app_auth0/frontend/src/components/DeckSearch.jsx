@@ -31,7 +31,6 @@ const DeckSearch = () => {
       const accessToken = sessionStorage.getItem('access_token');
       if (!accessToken) {
         setError('Please log in to search decks');
-        navigate('/');
         return;
       }
 
@@ -47,13 +46,12 @@ const DeckSearch = () => {
       if (!response.ok) {
         const errorData = await response.json();
         if (response.status === 401) {
+          setError('Please log in again');
           // Clear the token and redirect to login
           sessionStorage.removeItem('access_token');
-          sessionStorage.removeItem('id_token');
           localStorage.removeItem('user_info');
           localStorage.removeItem('tokens');
-          setError('Your session has expired. Please log in again.');
-          navigate('/');
+          window.location.href = '/';
           return;
         }
         throw new Error(errorData.error || 'Failed to fetch decks');

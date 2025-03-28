@@ -63,20 +63,11 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
       const data = await response.json();
       console.log('Received tokens and user info from backend');
       
-      // Store tokens in session storage
-      if (data.tokens && data.tokens.access_token) {
-        sessionStorage.setItem('access_token', data.tokens.access_token);
-        if (data.tokens.id_token) {
-          sessionStorage.setItem('id_token', data.tokens.id_token);
-        }
-      } else {
-        throw new Error('No access token received');
-      }
-      
-      // Store user info in localStorage
-      if (data.user) {
-        localStorage.setItem('user_info', JSON.stringify(data.user));
-      }
+      // Store tokens and user info
+      sessionStorage.setItem('access_token', data.tokens.access_token);
+      sessionStorage.setItem('id_token', data.tokens.id_token);
+      localStorage.setItem('user_info', JSON.stringify(data.user));
+      localStorage.setItem('tokens', JSON.stringify(data.tokens));
       
       // Reload the page to update the state
       window.location.reload();
