@@ -28,4 +28,76 @@ class User:
             'auth0_id': self.auth0_id,
             'created_at': self.created_at.isoformat(),
             'last_login': self.last_login.isoformat()
-        } 
+        }
+
+class Textbook:
+    def __init__(self, id, title, author, subject):
+        self.id = id or str(uuid.uuid4())
+        self.title = title
+        self.author = author
+        self.subject = subject
+        self.created_at = datetime.utcnow()
+
+class Part:
+    def __init__(self, id, textbook_id, title, order_index):
+        self.id = id or str(uuid.uuid4())
+        self.textbook_id = textbook_id
+        self.title = title
+        self.order_index = order_index
+
+class Chapter:
+    def __init__(self, id, part_id, title, order_index):
+        self.id = id or str(uuid.uuid4())
+        self.part_id = part_id
+        self.title = title
+        self.order_index = order_index
+
+class Topic:
+    def __init__(self, id, chapter_id, title, comment, order_index):
+        self.id = id or str(uuid.uuid4())
+        self.chapter_id = chapter_id
+        self.title = title
+        self.comment = comment
+        self.order_index = order_index
+
+class Deck:
+    def __init__(self, id, user_id, title):
+        self.id = id or str(uuid.uuid4())
+        self.user_id = user_id
+        self.title = title
+        self.created_at = datetime.utcnow()
+
+class Card:
+    def __init__(self, id, deck_id, topic_id, front, back):
+        self.id = id or str(uuid.uuid4())
+        self.deck_id = deck_id
+        self.topic_id = topic_id
+        self.front = front
+        self.back = back
+        self.created_at = datetime.utcnow()
+        self.next_review = datetime.utcnow()
+        self.interval = 1
+        self.easiness = 2.5
+        self.repetitions = 0
+
+class StudySession:
+    def __init__(self, id, deck_id):
+        self.id = id or str(uuid.uuid4())
+        self.deck_id = deck_id
+        self.started_at = datetime.utcnow()
+        self.ended_at = None
+
+class CardReview:
+    def __init__(self, id, session_id, card_id, quality, time_taken):
+        self.id = id or str(uuid.uuid4())
+        self.session_id = session_id
+        self.card_id = card_id
+        self.quality = quality
+        self.time_taken = time_taken
+        self.created_at = datetime.utcnow()
+        self.prev_easiness = None
+        self.prev_interval = None
+        self.prev_repetitions = None
+        self.new_easiness = None
+        self.new_interval = None
+        self.new_repetitions = None 

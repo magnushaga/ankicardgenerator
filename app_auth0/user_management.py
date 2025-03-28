@@ -77,3 +77,35 @@ class UserManager:
         except Exception as e:
             logger.error(f"Error initializing user analytics: {str(e)}")
             # Don't raise - this is a non-critical operation 
+
+def sync_auth0_user_to_supabase(auth0_user):
+    """Sync Auth0 user data with Supabase"""
+    try:
+        # Check if user exists by auth0_id
+        result = supabase.table('users').select('*').eq('auth0_id', auth0_user['sub']).execute()
+        
+        user_data = {
+            'email': auth0_user['email'],
+            'username': auth0_user.get('nickname', auth0_user['email'].split('@')[0]),
+            'auth0_id': auth0_user['sub'],
+            'picture': auth0_user.get('picture'),
+            'email_verified': auth0_user.get('email_verified', False),
+            'updated_at': datetime.utcnow().isoformat(),
+            'last_login': datetime.utcnow().isoformat()
+        }
+        
+        if result.data and len(result.data) > 0:
+            # Update existing user
+            user = result.data[0]
+            result = supabase.table('users').update(user_data).eq('id', user['id']).execute()
+            logger.info(f"Updated user {user['id']} in Supabase")
+        else:
+            # Create new user
+            result = supabase.table('users').insert(user_data).execute()
+            logger.info(f"Created new user in Supabase")
+            
+        return result.data[0] if result.data else None
+        
+    except Exception as e:
+        logger.error(f"Error syncing user to Supabase: {str(e)}")
+        raise 
