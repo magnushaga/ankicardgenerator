@@ -17,7 +17,7 @@ from stripe_config import (
 )
 from supabase import create_client
 from jwt_verify import verify_jwt
-from supabase_config import sync_auth0_user, supabase
+from supabase_config import SupabaseUser
 import urllib.parse
 
 # Configure logging first, before any other code
@@ -114,6 +114,37 @@ supabase = create_client(
     os.getenv('SUPABASE_KEY')
 )
 
+# Initialize Supabase user management
+supabase_user = SupabaseUser()
+
+try:
+    supabase_user.create_test_table()
+    logger.info("Database initialized successfully")
+except Exception as e:
+    logger.error(f"Error initializing database: {str(e)}")
+
+def exchange_code_for_tokens(code):
+    """Exchange authorization code for tokens"""
+    token_url = f"https://{AUTH0_DOMAIN}/oauth/token"
+    payload = {
+        "grant_type": "authorization_code",
+        "client_id": AUTH0_CLIENT_ID,
+        "client_secret": AUTH0_CLIENT_SECRET,
+        "code": code,
+        "redirect_uri": REDIRECT_URI
+    }
+    
+    try:
+        logger.debug(f"Exchanging code for tokens with payload: {payload}")
+        response = requests.post(token_url, json=payload)
+        response.raise_for_status()
+        return response.json()
+    except requests.exceptions.RequestException as e:
+        logger.error(f"Error exchanging code for tokens: {str(e)}")
+        if hasattr(e, 'response'):
+            logger.error(f"Response content: {e.response.text}")
+        raise RuntimeError(f"Failed to exchange code for tokens: {str(e)}")
+
 @app.route("/login")
 def login():
     """Generate Auth0 login URL"""
@@ -142,23 +173,8 @@ def callback():
 
     try:
         # Exchange code for tokens
-        token_url = f"https://{AUTH0_DOMAIN}/oauth/token"
-        payload = {
-            "grant_type": "authorization_code",
-            "client_id": AUTH0_CLIENT_ID,
-            "client_secret": AUTH0_CLIENT_SECRET,
-            "code": code,
-            "redirect_uri": REDIRECT_URI
-        }
-        
-        logger.debug(f"Exchanging code for tokens with payload: {payload}")
-        
-        token_response = requests.post(token_url, json=payload)
-        token_response.raise_for_status()
-        token_data = token_response.json()
-        
-        access_token = token_data.get('access_token')
-        id_token = token_data.get('id_token')
+        token_response = exchange_code_for_tokens(code)
+        access_token = token_response.get('access_token')
         
         if not access_token:
             logger.error("No access token in response")
@@ -173,25 +189,23 @@ def callback():
         userinfo_response.raise_for_status()
         user_info = userinfo_response.json()
 
-        logger.debug(f"Tokens received: access_token={access_token[:10]}..., id_token={id_token[:10]}...")
-        logger.debug(f"User info received: {user_info}")
+        # Sync user with Supabase
+        try:
+            supabase_user_data = supabase_user.sync_auth0_user(user_info)
+            logger.info(f"Successfully synced user with Supabase: {user_info['email']}")
+        except Exception as e:
+            logger.error(f"Error syncing with Supabase: {str(e)}")
+            supabase_user_data = None
 
         return jsonify({
             "access_token": access_token,
-            "id_token": id_token,
+            "id_token": token_response.get('id_token'),
             "user": user_info,
-            "tokens": {
-                "access_token": access_token,
-                "id_token": id_token,
-                "token_type": token_data.get('token_type', 'Bearer'),
-                "expires_in": token_data.get('expires_in')
-            }
+            "supabase_user": supabase_user_data
         })
 
-    except requests.exceptions.RequestException as e:
+    except Exception as e:
         logger.error(f"Error in callback: {str(e)}")
-        if hasattr(e, 'response'):
-            logger.error(f"Response content: {e.response.text}")
         return jsonify({"error": str(e)}), 500
 
 @app.route("/protected", methods=["GET"])

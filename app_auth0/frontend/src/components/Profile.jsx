@@ -6,6 +6,7 @@ function Profile() {
   const [tokens, setTokens] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [supabaseUser, setSupabaseUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -32,8 +33,10 @@ function Profile() {
     sessionStorage.removeItem("id_token");
     localStorage.removeItem("user_info");
     localStorage.removeItem("tokens");
+    localStorage.removeItem("supabase_user");
     setUserInfo(null);
     setTokens(null);
+    setSupabaseUser(null);
     setError(null);
   };
 
@@ -96,20 +99,20 @@ function Profile() {
     try {
       setIsLoading(true);
       setError(null);
-      const response = await fetch("http://localhost:5001/callback", {
-        method: "POST",
+      const response = await fetch('http://localhost:5001/callback', {
+        method: 'POST',
         headers: {
-          "Content-Type": "application/json",
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           code,
-          redirect_uri: "http://localhost:5173/profile",
+          redirect_uri: 'http://localhost:5173/profile',
         }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || "Failed to exchange code for token");
+        throw new Error(errorData.error || 'Failed to exchange code for token');
       }
 
       const data = await response.json();
@@ -117,14 +120,17 @@ function Profile() {
       // Store tokens and user info
       setTokens(data.tokens);
       setUserInfo(data.user);
+      setSupabaseUser(data.supabase_user);
       
-      // Store in session/local storage
-      sessionStorage.setItem("access_token", data.tokens.access_token);
-      sessionStorage.setItem("id_token", data.tokens.id_token);
-      localStorage.setItem("user_info", JSON.stringify(data.user));
-      localStorage.setItem("tokens", JSON.stringify(data.tokens));
+      // Store in storage
+      sessionStorage.setItem('access_token', data.tokens.access_token);
+      sessionStorage.setItem('id_token', data.tokens.id_token);
+      localStorage.setItem('user_info', JSON.stringify(data.user));
+      localStorage.setItem('tokens', JSON.stringify(data.tokens));
+      localStorage.setItem('supabase_user', JSON.stringify(data.supabase_user));
+      
     } catch (error) {
-      console.error("Error:", error);
+      console.error('Error:', error);
       setError(error.message);
       clearAllData();
     } finally {
@@ -135,9 +141,11 @@ function Profile() {
   useEffect(() => {
     const savedUserInfo = localStorage.getItem("user_info");
     const savedTokens = localStorage.getItem("tokens");
-    if (savedUserInfo && savedTokens) {
+    const savedSupabaseUser = localStorage.getItem("supabase_user");
+    if (savedUserInfo && savedTokens && savedSupabaseUser) {
       setUserInfo(JSON.parse(savedUserInfo));
       setTokens(JSON.parse(savedTokens));
+      setSupabaseUser(JSON.parse(savedSupabaseUser));
     }
   }, []);
 
@@ -230,6 +238,20 @@ function Profile() {
                 fontSize: '14px'
               }}>
                 {JSON.stringify(tokens, null, 2)}
+              </pre>
+            </div>
+          )}
+
+          {supabaseUser && (
+            <div style={{ marginBottom: '20px' }}>
+              <h3>Supabase User Data:</h3>
+              <pre style={{ 
+                background: '#f5f5f5', 
+                padding: '10px', 
+                borderRadius: '5px',
+                overflow: 'auto'
+              }}>
+                {JSON.stringify(supabaseUser, null, 2)}
               </pre>
             </div>
           )}
