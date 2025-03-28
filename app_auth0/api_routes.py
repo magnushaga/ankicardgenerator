@@ -641,61 +641,63 @@ def get_due_cards(deck_id):
         logger.error(f"Error getting due cards: {e}")
         return jsonify({"error": str(e)}), 500
 
-@api.route('/api/search-decks', methods=['GET'])
+@api.route('/search-decks', methods=['GET'])
 @requires_auth
 def search_decks():
     """Search for decks by title and return with cards"""
     query = request.args.get('q', '')
     
     try:
-        # Get user from Supabase using Auth0 ID
-        user_response = supabase.table('users').select('*').eq('auth0_id', request.user['sub']).execute()
-        if not user_response.data:
-            return jsonify({"error": "User not found in database"}), 404
+        # Get user info from Supabase
+        user_result = supabase.table('users').select('*').eq('auth0_id', request.user['sub']).execute()
+        
+        if not user_result.data or len(user_result.data) == 0:
+            return jsonify({"error": "User not found"}), 404
             
-        user = user_response.data[0]
+        user = user_result.data[0]
         
-        # Search decks in Supabase
-        decks_response = supabase.table('decks').select('*').ilike('title', f'%{query}%').execute()
-        decks = decks_response.data
+        # Search for decks
+        decks_result = supabase.table('decks').select('*').ilike('title', f'%{query}%').execute()
         
+        if not decks_result.data:
+            return jsonify([])
+            
         # Get cards for each deck
-        result = []
-        for deck in decks:
-            cards_response = supabase.table('cards').select('*').eq('deck_id', deck['id']).execute()
-            cards = cards_response.data
+        decks = []
+        for deck in decks_result.data:
+            cards_result = supabase.table('cards').select('*').eq('deck_id', deck['id']).execute()
+            cards = []
             
-            # Get part, chapter, and topic info for each card
-            for card in cards:
-                topic_response = supabase.table('topics').select('*').eq('id', card['topic_id']).execute()
-                topic = topic_response.data[0] if topic_response.data else None
-                
-                if topic:
-                    chapter_response = supabase.table('chapters').select('*').eq('id', topic['chapter_id']).execute()
-                    chapter = chapter_response.data[0] if chapter_response.data else None
+            if cards_result.data:
+                for card in cards_result.data:
+                    # Get topic info for each card
+                    topic_result = supabase.table('topics').select('*').eq('id', card['topic_id']).execute()
+                    topic = topic_result.data[0] if topic_result.data else None
                     
-                    if chapter:
-                        part_response = supabase.table('parts').select('*').eq('id', chapter['part_id']).execute()
-                        part = part_response.data[0] if part_response.data else None
-                        
-                        card['partTitle'] = part['title'] if part else None
-                        card['chapterTitle'] = chapter['title']
-                        card['topicTitle'] = topic['title']
+                    # Get chapter info
+                    chapter_result = supabase.table('chapters').select('*').eq('id', topic['chapter_id']).execute() if topic else None
+                    chapter = chapter_result.data[0] if chapter_result and chapter_result.data else None
+                    
+                    # Get part info
+                    part_result = supabase.table('parts').select('*').eq('id', chapter['part_id']).execute() if chapter else None
+                    part = part_result.data[0] if part_result and part_result.data else None
+                    
+                    cards.append({
+                        'id': card['id'],
+                        'front': card['front'],
+                        'back': card['back'],
+                        'partTitle': part['title'] if part else None,
+                        'chapterTitle': chapter['title'] if chapter else None,
+                        'topicTitle': topic['title'] if topic else None
+                    })
             
-            result.append({
+            decks.append({
                 'id': deck['id'],
                 'title': deck['title'],
-                'cards': [{
-                    'id': card['id'],
-                    'front': card['front'],
-                    'back': card['back'],
-                    'partTitle': card.get('partTitle'),
-                    'chapterTitle': card.get('chapterTitle'),
-                    'topicTitle': card.get('topicTitle')
-                } for card in cards]
+                'cards': cards
             })
         
-        return jsonify(result)
+        return jsonify(decks)
         
     except Exception as e:
         logger.error(f"Error searching decks: {str(e)}")

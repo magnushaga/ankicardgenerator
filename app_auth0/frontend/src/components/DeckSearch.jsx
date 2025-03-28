@@ -46,12 +46,17 @@ const DeckSearch = () => {
       if (!response.ok) {
         const errorData = await response.json();
         if (response.status === 401) {
-          setError('Please log in again');
-          // Clear the token and redirect to login
-          sessionStorage.removeItem('access_token');
-          localStorage.removeItem('user_info');
-          localStorage.removeItem('tokens');
-          window.location.href = '/';
+          // Only clear data if it's a genuine authentication error
+          if (errorData.error === "Token has expired") {
+            setError('Your session has expired. Please log in again.');
+            sessionStorage.removeItem('access_token');
+            localStorage.removeItem('user_info');
+            localStorage.removeItem('tokens');
+            window.location.href = '/';
+            return;
+          }
+          // For other auth errors, try to refresh the token
+          setError('Authentication error. Please try again.');
           return;
         }
         throw new Error(errorData.error || 'Failed to fetch decks');
