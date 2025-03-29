@@ -1,12 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
+import { Box, Typography, Button, Avatar, Paper, Divider } from '@mui/material';
+import AccountCircleIcon from '@mui/icons-material/AccountCircle';
+import LogoutIcon from '@mui/icons-material/Logout';
 
 function Profile() {
   const [userInfo, setUserInfo] = useState(null);
   const [tokens, setTokens] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [supabaseUser, setSupabaseUser] = useState(null);
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -33,29 +35,9 @@ function Profile() {
     sessionStorage.removeItem("id_token");
     localStorage.removeItem("user_info");
     localStorage.removeItem("tokens");
-    localStorage.removeItem("supabase_user");
     setUserInfo(null);
     setTokens(null);
-    setSupabaseUser(null);
     setError(null);
-  };
-
-  const handleLogin = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const response = await fetch("http://localhost:5001/login");
-      const data = await response.json();
-      
-      if (data.auth_url) {
-        window.location.href = data.auth_url;
-      }
-    } catch (error) {
-      setError("Error starting login process");
-      console.error("Error:", error);
-    } finally {
-      setIsLoading(false);
-    }
   };
 
   const handleLogout = async () => {
@@ -83,7 +65,7 @@ function Profile() {
 
       const data = await response.json();
 
-      // Redirect to Auth0 logout URL (will only log out of Auth0, not Google)
+      // Redirect to Auth0 logout URL
       if (data.logout_url) {
         window.location.href = data.logout_url;
       }
@@ -117,17 +99,19 @@ function Profile() {
 
       const data = await response.json();
       
+      if (!data.tokens || !data.user) {
+        throw new Error('Invalid response format from server');
+      }
+
       // Store tokens and user info
       setTokens(data.tokens);
       setUserInfo(data.user);
-      setSupabaseUser(data.supabase_user);
       
       // Store in storage
       sessionStorage.setItem('access_token', data.tokens.access_token);
       sessionStorage.setItem('id_token', data.tokens.id_token);
       localStorage.setItem('user_info', JSON.stringify(data.user));
       localStorage.setItem('tokens', JSON.stringify(data.tokens));
-      localStorage.setItem('supabase_user', JSON.stringify(data.supabase_user));
       
     } catch (error) {
       console.error('Error:', error);
@@ -141,158 +125,159 @@ function Profile() {
   useEffect(() => {
     const savedUserInfo = localStorage.getItem("user_info");
     const savedTokens = localStorage.getItem("tokens");
-    const savedSupabaseUser = localStorage.getItem("supabase_user");
-    if (savedUserInfo && savedTokens && savedSupabaseUser) {
+    if (savedUserInfo && savedTokens) {
       setUserInfo(JSON.parse(savedUserInfo));
       setTokens(JSON.parse(savedTokens));
-      setSupabaseUser(JSON.parse(savedSupabaseUser));
     }
   }, []);
 
-  const formatJWT = (token) => {
-    if (!token) return null;
-    const [header, payload, signature] = token.split('.');
-    try {
-      return {
-        header: JSON.parse(atob(header)),
-        payload: JSON.parse(atob(payload)),
-        signature: signature
-      };
-    } catch (e) {
-      return { raw: token };
-    }
-  };
-
   if (isLoading) {
-    return <div>Loading...</div>;
+    return (
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontFamily: 'Arial, sans-serif'
+      }}>
+        <Typography>Loading...</Typography>
+      </Box>
+    );
+  }
+
+  if (error) {
+    return (
+      <Box sx={{ 
+        p: 3,
+        maxWidth: 800,
+        mx: 'auto',
+        mt: 4
+      }}>
+        <Paper sx={{ p: 3, bgcolor: '#fff5f5' }}>
+          <Typography color="error">{error}</Typography>
+        </Paper>
+      </Box>
+    );
+  }
+
+  if (!userInfo) {
+    return (
+      <Box sx={{ 
+        p: 3,
+        maxWidth: 800,
+        mx: 'auto',
+        mt: 4
+      }}>
+        <Paper sx={{ 
+          p: 4, 
+          textAlign: 'center',
+          bgcolor: '#f8f8f8'
+        }}>
+          <Typography variant="h5" gutterBottom>
+            Please log in to view your profile
+          </Typography>
+          <Typography color="text.secondary">
+            You can log in using the button in the header
+          </Typography>
+        </Paper>
+      </Box>
+    );
   }
 
   return (
-    <div style={{ 
-      padding: '20px',
-      maxWidth: '800px',
-      margin: '0 auto',
-      fontFamily: 'Arial, sans-serif'
+    <Box sx={{ 
+      p: 3,
+      maxWidth: 800,
+      mx: 'auto',
+      mt: 4
     }}>
-      {error && (
-        <div style={{ color: 'red', marginBottom: '20px' }}>
-          {error}
-        </div>
-      )}
-      
-      {userInfo ? (
-        <div>
-          {/* Profile Header */}
-          <div style={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            gap: '20px',
-            marginBottom: '30px',
-            padding: '20px',
-            backgroundColor: '#f8f9fa',
-            borderRadius: '10px'
-          }}>
-            {userInfo.picture && (
-              <img 
-                src={userInfo.picture} 
-                alt="Profile" 
-                style={{ 
-                  width: '100px', 
-                  height: '100px', 
-                  borderRadius: '50%',
-                  objectFit: 'cover',
-                  border: '3px solid white',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-                }} 
-              />
-            )}
-            <div>
-              <h1 style={{ margin: '0 0 10px 0' }}>{userInfo.name}</h1>
-              <p style={{ margin: '0', color: '#666' }}>{userInfo.email}</p>
-            </div>
-          </div>
-
-          {/* User Info Section */}
-          <div style={{ marginBottom: '20px' }}>
-            <h2>User Information</h2>
-            <pre style={{ 
-              backgroundColor: '#f8f9fa',
-              padding: '15px',
-              borderRadius: '5px',
-              overflow: 'auto',
-              fontSize: '14px'
-            }}>
-              {JSON.stringify(userInfo, null, 2)}
-            </pre>
-          </div>
-
-          {/* JWT Token Section */}
-          {tokens && (
-            <div style={{ marginBottom: '20px' }}>
-              <h2>Token Information</h2>
-              <pre style={{ 
-                backgroundColor: '#f8f9fa',
-                padding: '15px',
-                borderRadius: '5px',
-                overflow: 'auto',
-                fontSize: '14px'
-              }}>
-                {JSON.stringify(tokens, null, 2)}
-              </pre>
-            </div>
+      <Paper sx={{ p: 4 }}>
+        {/* Profile Header */}
+        <Box sx={{ 
+          display: 'flex', 
+          flexDirection: 'column',
+          alignItems: 'center', 
+          mb: 4
+        }}>
+          {userInfo.picture ? (
+            <Avatar 
+              src={userInfo.picture} 
+              alt={userInfo.name}
+              sx={{ 
+                width: 120, 
+                height: 120,
+                mb: 2,
+                border: '3px solid #000000'
+              }}
+            />
+          ) : (
+            <AccountCircleIcon sx={{ 
+              fontSize: 120, 
+              mb: 2,
+              color: '#000000'
+            }} />
           )}
-
-          {supabaseUser && (
-            <div style={{ marginBottom: '20px' }}>
-              <h3>Supabase User Data:</h3>
-              <pre style={{ 
-                background: '#f5f5f5', 
-                padding: '10px', 
-                borderRadius: '5px',
-                overflow: 'auto'
-              }}>
-                {JSON.stringify(supabaseUser, null, 2)}
-              </pre>
-            </div>
-          )}
-
-          <button 
+          <Typography variant="h4" gutterBottom>
+            {userInfo.name}
+          </Typography>
+          <Typography color="text.secondary" gutterBottom>
+            {userInfo.email}
+          </Typography>
+          <Button
+            variant="outlined"
+            color="error"
+            startIcon={<LogoutIcon />}
             onClick={handleLogout}
             disabled={isLoading}
-            style={{
-              padding: '10px 20px',
-              backgroundColor: '#dc3545',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '16px'
-            }}
+            sx={{ mt: 2 }}
           >
             {isLoading ? 'Logging out...' : 'Logout'}
-          </button>
-        </div>
-      ) : (
-        <div style={{ textAlign: 'center', marginTop: '50px' }}>
-          <button 
-            onClick={handleLogin}
-            disabled={isLoading}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#007bff',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              fontSize: '16px',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-            }}
-          >
-            {isLoading ? 'Logging in...' : 'Login with Auth0'}
-          </button>
-        </div>
-      )}
-    </div>
+          </Button>
+        </Box>
+
+        <Divider sx={{ my: 4 }} />
+
+        {/* User Information */}
+        <Box>
+          <Typography variant="h6" gutterBottom>
+            Account Information
+          </Typography>
+          <Box sx={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+            gap: 2
+          }}>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Email Verified
+              </Typography>
+              <Typography>
+                {userInfo.email_verified ? 'Yes' : 'No'}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Last Updated
+              </Typography>
+              <Typography>
+                {new Date(userInfo.updated_at).toLocaleDateString()}
+              </Typography>
+            </Box>
+            <Box>
+              <Typography variant="subtitle2" color="text.secondary">
+                Auth0 ID
+              </Typography>
+              <Typography sx={{ 
+                wordBreak: 'break-all',
+                fontSize: '0.875rem'
+              }}>
+                {userInfo.sub}
+              </Typography>
+            </Box>
+          </Box>
+        </Box>
+      </Paper>
+    </Box>
   );
 }
 

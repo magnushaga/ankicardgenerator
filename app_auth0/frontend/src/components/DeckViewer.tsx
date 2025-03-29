@@ -1,0 +1,1 @@
+const response = await fetch(`http://localhost:5002/api/search-decks?q=${encodeURIComponent(searchQuery)}`); 

@@ -12,15 +12,17 @@ deck_shares = db.Table('deck_shares',
     db.Column('shared_at', db.DateTime, default=datetime.utcnow)
 )
 
-class User(db.Model):
+class User(db.Model, UserMixin):
     __tablename__ = 'users'
     
-    id = db.Column(db.String(36), primary_key=True)  # Supabase UUID
+    id = db.Column(db.String(36), primary_key=True)  # Auth0 user ID
     email = db.Column(db.String(255), unique=True, nullable=False)
     username = db.Column(db.String(255), unique=True, nullable=False)
+    auth0_id = db.Column(db.String(255), unique=True, nullable=False)  # Auth0 sub claim
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     last_login = db.Column(db.DateTime)
     is_active = db.Column(db.Boolean, default=True)
+    email_verified = db.Column(db.Boolean, default=False)
     preferred_study_time = db.Column(db.String(50))
     notification_preferences = db.Column(db.JSON)
     study_goals = db.Column(db.JSON)
@@ -34,14 +36,16 @@ class User(db.Model):
     reminders = db.relationship('StudyReminder', backref='user', lazy=True)
     
     @classmethod
-    def get_or_create_from_supabase(cls, supabase_user):
-        """Get or create a user from Supabase auth data"""
-        user = cls.query.get(supabase_user.id)
+    def get_or_create_from_auth0(cls, auth0_user):
+        """Get or create a user from Auth0 user data"""
+        user = cls.query.filter_by(auth0_id=auth0_user['sub']).first()
         if not user:
             user = cls(
-                id=supabase_user.id,
-                email=supabase_user.email,
-                username=supabase_user.email.split('@')[0],  # Default username from email
+                id=str(uuid.uuid4()),  # Generate a UUID for the user
+                email=auth0_user['email'],
+                username=auth0_user.get('nickname', auth0_user['email'].split('@')[0]),
+                auth0_id=auth0_user['sub'],
+                email_verified=auth0_user.get('email_verified', False),
                 created_at=datetime.utcnow()
             )
             db.session.add(user)
@@ -53,9 +57,11 @@ class User(db.Model):
             'id': self.id,
             'email': self.email,
             'username': self.username,
+            'auth0_id': self.auth0_id,
             'created_at': self.created_at.isoformat(),
             'last_login': self.last_login.isoformat() if self.last_login else None,
             'is_active': self.is_active,
+            'email_verified': self.email_verified,
             'preferred_study_time': self.preferred_study_time,
             'notification_preferences': self.notification_preferences,
             'study_goals': self.study_goals

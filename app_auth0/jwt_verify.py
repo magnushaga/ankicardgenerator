@@ -27,7 +27,13 @@ def get_jwks():
 def verify_jwt(token):
     """Verify the JWT token using Auth0's JWKS"""
     try:
-        unverified_header = jwt.get_unverified_header(token)
+        # First try to decode without verification to get the header
+        try:
+            unverified_header = jwt.get_unverified_header(token)
+        except Exception as e:
+            logger.error(f"Error getting unverified header: {str(e)}")
+            raise jwt.InvalidTokenError("Invalid token format")
+
         jwks = get_jwks()
         
         # Find the key that matches the token's key ID
@@ -47,23 +53,27 @@ def verify_jwt(token):
             raise jwt.InvalidTokenError("No matching key found")
 
         # Verify the token
-        payload = jwt.decode(
-            token,
-            rsa_key,
-            algorithms=["RS256"],
-            audience="http://localhost:5000/api",  # Your API identifier
-            issuer=f"https://dev-pv6ho0i8drbnbp6l.eu.auth0.com/"
-        )
-        
-        return payload
-    except jwt.ExpiredSignatureError:
-        logger.error("Token has expired")
-        raise
-    except jwt.JWTClaimsError as e:
-        logger.error(f"Invalid claims: {str(e)}")
-        raise
+        try:
+            payload = jwt.decode(
+                token,
+                rsa_key,
+                algorithms=["RS256"],
+                audience="http://localhost:5002/api",  # Your API identifier
+                issuer=f"https://dev-pv6ho0i8drbnbp6l.eu.auth0.com/"
+            )
+            return payload
+        except jwt.ExpiredSignatureError:
+            logger.error("Token has expired")
+            raise
+        except jwt.JWTClaimsError as e:
+            logger.error(f"Invalid claims: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error decoding token: {str(e)}")
+            raise
+
     except Exception as e:
-        logger.error(f"Error validating token: {str(e)}")
+        logger.error(f"Error in verify_jwt: {str(e)}")
         raise
 
 def requires_auth(f):
@@ -75,16 +85,29 @@ def requires_auth(f):
             return jsonify({"error": "No authorization header"}), 401
 
         try:
-            token = auth_header.split(" ")[1]
+            # Extract token from Authorization header
+            parts = auth_header.split(" ")
+            if len(parts) != 2 or parts[0].lower() != "bearer":
+                return jsonify({"error": "Invalid authorization header format"}), 401
+            
+            token = parts[1]
+            if not token:
+                return jsonify({"error": "Empty token"}), 401
+
+            # Verify the token
             payload = verify_jwt(token)
+            
             # Add user info to request context
             request.user = payload
             return f(*args, **kwargs)
+            
         except jwt.ExpiredSignatureError:
             return jsonify({"error": "Token has expired"}), 401
         except (jwt.JWTClaimsError, jwt.InvalidTokenError) as e:
-            return jsonify({"error": str(e)}), 401
-        except Exception as e:
+            logger.error(f"Token validation error: {str(e)}")
             return jsonify({"error": "Invalid token"}), 401
+        except Exception as e:
+            logger.error(f"Unexpected error in requires_auth: {str(e)}")
+            return jsonify({"error": "Authentication failed"}), 401
 
     return decorated 
