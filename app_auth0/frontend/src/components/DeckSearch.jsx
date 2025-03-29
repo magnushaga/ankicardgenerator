@@ -111,34 +111,12 @@ const DeckSearch = ({ userInfo: propUserInfo, accessToken: propAccessToken }) =>
 
   const handleDeckSelect = async (deck) => {
     try {
-      console.log('Fetching cards for deck:', deck.id);
+      console.log('Navigating to deck view:', deck.id);
       
-      const response = await fetch(`http://localhost:5002/api/decks/${deck.id}/cards`, {
-        headers: {
-          'Authorization': `Bearer ${propAccessToken}`,
-          'Content-Type': 'application/json',
-        },
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to fetch deck cards');
-      }
-
-      const cards = await response.json();
-      console.log('Fetched cards:', cards);
-
-      // Navigate to the deck viewer with both deck and cards data
-      navigate(`/deck/${deck.id}`, {
-        state: {
-          deck: {
-            ...deck,
-            cards: cards
-          }
-        }
-      });
+      // Navigate to the deck viewer with the deck ID
+      navigate(`/deck/${deck.id}/cards`);
     } catch (err) {
-      console.error('Error fetching deck cards:', err);
+      console.error('Error navigating to deck view:', err);
       setError(err.message);
     }
   };

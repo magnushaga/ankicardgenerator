@@ -6,6 +6,7 @@ import DeckSearch from './components/DeckSearch';
 import Profile from './components/Profile';
 import AnkiDeckViewer from './components/AnkiDeckViewer';
 import DeckHierarchyViewer from './components/DeckHierarchyViewer';
+import DeckViewer from './components/DeckViewer';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -164,6 +165,16 @@ function AppContent() {
                 }
                 return <AnkiDeckViewer />;
               })()
+            } 
+          />
+          <Route 
+            path="/deck/:deckId/cards" 
+            element={
+              userInfo ? (
+                <DeckViewer />
+              ) : (
+                <Navigate to="/" replace state={{ from: location }} />
+              )
             } 
           />
         </Routes>
