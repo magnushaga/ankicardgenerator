@@ -9,6 +9,9 @@ from functools import wraps
 import jwt
 from jwt.algorithms import RSAAlgorithm
 import requests
+import uuid
+from datetime import datetime
+from auth_decorators import requires_auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -40,60 +43,6 @@ AUTH0_CLIENT_ID = os.getenv("AUTH0_CLIENT_ID")
 AUTH0_CLIENT_SECRET = os.getenv("AUTH0_CLIENT_SECRET")
 AUTH0_AUDIENCE = os.getenv('AUTH0_AUDIENCE', 'http://localhost:5002/api')
 
-def get_token_auth_header():
-    """Obtains the Access Token from the Authorization Header"""
-    auth = request.headers.get("Authorization", None)
-    if not auth:
-        return None
-
-    parts = auth.split()
-    if parts[0].lower() != "bearer":
-        return None
-    elif len(parts) == 1:
-        return None
-    elif len(parts) > 2:
-        return None
-
-    return parts[1]
-
-def requires_auth(f):
-    """Decorator to require authentication for routes"""
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        token = get_token_auth_header()
-        if not token:
-            return jsonify({"error": "No authorization token provided"}), 401
-
-        try:
-            # Get Auth0 public key
-            jwks_url = f'https://{AUTH0_DOMAIN}/.well-known/jwks.json'
-            jwks_client = jwt.PyJWKClient(jwks_url)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
-
-            # Verify the token
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"],
-                audience=AUTH0_AUDIENCE,
-                issuer=f"https://{AUTH0_DOMAIN}/"
-            )
-
-            # Add user info to request
-            request.user = payload
-            return f(*args, **kwargs)
-
-        except jwt.ExpiredSignatureError:
-            return jsonify({"error": "Token has expired"}), 401
-        except jwt.JWTClaimsError as e:
-            logger.error(f"JWT Claims Error: {str(e)}")
-            return jsonify({"error": "Invalid claims"}), 401
-        except Exception as e:
-            logger.error(f"Error verifying token: {str(e)}")
-            return jsonify({"error": "Invalid token"}), 401
-
-    return decorated
-
 @app.route('/api/test', methods=['GET'])
 def test():
     """Test endpoint to verify API is working"""
@@ -107,6 +56,47 @@ def protected():
         "message": "Protected endpoint is working!",
         "user": request.user
     })
+
+@app.route('/api/search-decks', methods=['GET'])
+@requires_auth
+def search_decks():
+    """Search for decks with authentication"""
+    try:
+        query = request.args.get('q', '')
+        logger.info(f"Searching decks with query: {query}")
+        
+        # Log the entire request object for debugging
+        logger.info("Request object: %s", request.__dict__)
+        logger.info("Request user object: %s", getattr(request, 'user', None))
+        
+        # For testing, we'll return some mock data if user info exists
+        if hasattr(request, 'user') and request.user:
+            logger.info("User authenticated, returning mock data")
+            mock_decks = [
+                {
+                    'id': '1',
+                    'title': 'Test Deck 1',
+                    'user_id': request.user.get('sub', 'unknown'),
+                    'created_at': datetime.utcnow().isoformat(),
+                    'cards': []
+                },
+                {
+                    'id': '2',
+                    'title': 'Test Deck 2',
+                    'user_id': request.user.get('sub', 'unknown'),
+                    'created_at': datetime.utcnow().isoformat(),
+                    'cards': []
+                }
+            ]
+            return jsonify(mock_decks)
+        else:
+            logger.error("No user information found in request")
+            return jsonify({"error": "User information not found"}), 401
+            
+    except Exception as e:
+        logger.error(f"Error searching decks: {e}")
+        logger.error("Exception details:", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route('/api/user-decks', methods=['GET'])
 @requires_auth

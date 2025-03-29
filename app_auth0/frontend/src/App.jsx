@@ -39,8 +39,14 @@ function AppContent() {
           // Store tokens and user info
           setTokens(data.tokens);
           setUserInfo(data.user);
-          localStorage.setItem('tokens', JSON.stringify(data.tokens));
+          
+          // Store access token in sessionStorage and other data in localStorage
+          if (data.tokens?.access_token) {
+            sessionStorage.setItem('access_token', data.tokens.access_token);
+            console.log('Stored access token in sessionStorage');
+          }
           localStorage.setItem('user_info', JSON.stringify(data.user));
+          localStorage.setItem('tokens', JSON.stringify(data.tokens));
 
           // Redirect to stored return URL or profile
           const returnTo = localStorage.getItem('returnTo') || '/profile';
@@ -60,11 +66,13 @@ function AppContent() {
     // Load saved user info and tokens
     const savedUserInfo = localStorage.getItem("user_info");
     const savedTokens = localStorage.getItem("tokens");
+    const accessToken = sessionStorage.getItem("access_token");
     
-    if (savedUserInfo && savedTokens) {
+    if (savedUserInfo && savedTokens && accessToken) {
       try {
         setUserInfo(JSON.parse(savedUserInfo));
         setTokens(JSON.parse(savedTokens));
+        console.log('Loaded saved user data and tokens');
       } catch (err) {
         console.error('Error parsing stored data:', err);
         clearAllData();
@@ -79,6 +87,7 @@ function AppContent() {
   const clearAllData = () => {
     localStorage.removeItem("user_info");
     localStorage.removeItem("tokens");
+    sessionStorage.removeItem("access_token");
     setUserInfo(null);
     setTokens(null);
     setError(null);
@@ -100,7 +109,26 @@ function AppContent() {
         onLogout={clearAllData}
       />
       <Routes>
-        <Route path="/" element={<DeckSearch />} />
+        <Route 
+          path="/" 
+          element={
+            (() => {
+              const accessToken = sessionStorage.getItem('access_token');
+              console.log('=== App.jsx Debug Info ===');
+              console.log('Current User Info:', userInfo);
+              console.log('Current Tokens:', tokens);
+              console.log('Access Token from Session:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
+              console.log('==========================');
+              
+              return (
+                <DeckSearch 
+                  userInfo={userInfo}
+                  accessToken={accessToken}
+                />
+              );
+            })()
+          } 
+        />
         <Route 
           path="/profile" 
           element={

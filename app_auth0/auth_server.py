@@ -13,6 +13,7 @@ import logging
 import urllib.parse
 from user_management import create_or_update_user, get_user_by_auth0_id
 from api_routes import api
+from datetime import datetime
 
 # Configure logging first, before any other code
 logging.basicConfig(
@@ -101,16 +102,23 @@ def requires_auth(f):
         
         try:
             token = auth_header.split(' ')[1]
-            # Verify the token with Auth0
-            jwks_url = f'https://{AUTH0_DOMAIN}/.well-known/jwks.json'
-            jwks_client = jwt.PyJWKClient(jwks_url)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"]
+            # Get user info directly from Auth0
+            userinfo_url = f"https://{AUTH0_DOMAIN}/userinfo"
+            userinfo_response = requests.get(
+                userinfo_url,
+                headers={"Authorization": f"Bearer {token}"}
             )
+            
+            if not userinfo_response.ok:
+                logger.error(f"Auth0 userinfo request failed: {userinfo_response.text}")
+                return jsonify({"error": "Failed to get user info from Auth0"}), 401
+                
+            user_info = userinfo_response.json()
+            
+            # Add user info to request
+            request.user = user_info
             return f(*args, **kwargs)
+            
         except Exception as e:
             logger.error(f"Error verifying token: {str(e)}")
             return jsonify({"error": "Invalid token"}), 401
@@ -143,8 +151,24 @@ def callback():
 
     try:
         # Exchange code for tokens
-        token_response = exchange_code_for_tokens(code)
-        access_token = token_response.get('access_token')
+        token_url = f"https://{AUTH0_DOMAIN}/oauth/token"
+        payload = {
+            "grant_type": "authorization_code",
+            "client_id": AUTH0_CLIENT_ID,
+            "client_secret": AUTH0_CLIENT_SECRET,
+            "code": code,
+            "redirect_uri": REDIRECT_URI
+        }
+        
+        logger.info("Exchanging code for tokens...")
+        token_response = requests.post(token_url, json=payload)
+        
+        if not token_response.ok:
+            logger.error(f"Token exchange failed: {token_response.text}")
+            return jsonify({"error": "Failed to exchange code for tokens"}), 500
+            
+        token_data = token_response.json()
+        access_token = token_data.get('access_token')
         
         if not access_token:
             logger.error("No access token in response")
@@ -156,8 +180,13 @@ def callback():
             userinfo_url,
             headers={"Authorization": f"Bearer {access_token}"}
         )
-        userinfo_response.raise_for_status()
+        
+        if not userinfo_response.ok:
+            logger.error(f"Failed to get user info: {userinfo_response.text}")
+            return jsonify({"error": "Failed to get user info"}), 500
+            
         user_info = userinfo_response.json()
+        logger.info(f"Successfully retrieved user info for: {user_info.get('email')}")
 
         # Create or update user in Supabase
         try:
@@ -175,7 +204,7 @@ def callback():
         return jsonify({
             "tokens": {
                 "access_token": access_token,
-                "id_token": token_response.get('id_token')
+                "id_token": token_data.get('id_token')
             },
             "user": user_info
         })
@@ -189,26 +218,29 @@ def callback():
 def userinfo():
     """Get user information from Auth0 and our database"""
     try:
-        auth_header = request.headers.get('Authorization')
-        token = auth_header.split(' ')[1]
+        # User info is already available from the requires_auth decorator
+        user_info = request.user
         
-        # Get user info from Auth0
-        userinfo_url = f"https://{AUTH0_DOMAIN}/userinfo"
-        userinfo_response = requests.get(
-            userinfo_url,
-            headers={"Authorization": f"Bearer {token}"}
-        )
-        userinfo_response.raise_for_status()
-        user_info = userinfo_response.json()
-
         # Get user from our database
-        db_user = get_user_by_auth0_id(user_info['sub'])
-        if db_user:
-            user_info['db_user'] = db_user
+        try:
+            db_user = get_user_by_auth0_id(user_info['sub'])
+            if db_user:
+                user_info['db_user'] = db_user
+                logger.info(f"Successfully retrieved user {db_user['email']} from database")
+        except Exception as e:
+            logger.error(f"Error getting user from database: {str(e)}")
+            # Continue without database user info
+
+        # Ensure all required fields are present
+        user_info.setdefault('picture', None)
+        user_info.setdefault('name', user_info.get('email', '').split('@')[0])
+        user_info.setdefault('email_verified', False)
+        user_info.setdefault('updated_at', user_info.get('updated_at', datetime.utcnow().isoformat()))
 
         return jsonify({
             "user": user_info
         })
+        
     except Exception as e:
         logger.error(f"Error getting user info: {str(e)}")
         return jsonify({"error": str(e)}), 500
