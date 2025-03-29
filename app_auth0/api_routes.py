@@ -530,7 +530,7 @@ def get_achievements():
         
         return jsonify(result.data)
         
-    except Exception as e:
+        except Exception as e:
         logger.error(f"Error getting achievements: {e}")
         return jsonify({"error": str(e)}), 500
 
