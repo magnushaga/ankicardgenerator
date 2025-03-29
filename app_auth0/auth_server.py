@@ -159,7 +159,19 @@ def callback():
         userinfo_response.raise_for_status()
         user_info = userinfo_response.json()
 
-        # Return tokens and user info without database sync
+        # Create or update user in Supabase
+        try:
+            db_user = create_or_update_user(user_info)
+            if db_user:
+                user_info['db_user'] = db_user
+                logger.info(f"Successfully synced user {db_user['email']} with Supabase")
+            else:
+                logger.error("Failed to sync user with Supabase")
+                return jsonify({"error": "Failed to sync user with Supabase"}), 500
+        except Exception as e:
+            logger.error(f"Error syncing user with Supabase: {str(e)}")
+            return jsonify({"error": "Failed to sync user with Supabase"}), 500
+
         return jsonify({
             "tokens": {
                 "access_token": access_token,
