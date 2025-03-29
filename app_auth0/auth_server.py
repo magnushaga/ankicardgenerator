@@ -11,7 +11,7 @@ from jwt.algorithms import RSAAlgorithm
 import json
 import logging
 import urllib.parse
-from user_management import sync_auth0_user_to_supabase
+from user_management import create_or_update_user, get_user_by_auth0_id
 from api_routes import api
 
 # Configure logging first, before any other code
@@ -159,15 +159,7 @@ def callback():
         userinfo_response.raise_for_status()
         user_info = userinfo_response.json()
 
-        # Sync user with Supabase
-        try:
-            supabase_user = sync_auth0_user_to_supabase(user_info)
-            if supabase_user:
-                user_info['supabase_id'] = supabase_user['id']
-        except Exception as e:
-            logger.error(f"Error syncing user with Supabase: {str(e)}")
-            # Continue without Supabase sync - don't fail the login
-
+        # Return tokens and user info without database sync
         return jsonify({
             "tokens": {
                 "access_token": access_token,
@@ -183,7 +175,7 @@ def callback():
 @app.route("/userinfo", methods=["GET"])
 @requires_auth
 def userinfo():
-    """Get user information from Auth0"""
+    """Get user information from Auth0 and our database"""
     try:
         auth_header = request.headers.get('Authorization')
         token = auth_header.split(' ')[1]
@@ -196,6 +188,11 @@ def userinfo():
         )
         userinfo_response.raise_for_status()
         user_info = userinfo_response.json()
+
+        # Get user from our database
+        db_user = get_user_by_auth0_id(user_info['sub'])
+        if db_user:
+            user_info['db_user'] = db_user
 
         return jsonify({
             "user": user_info

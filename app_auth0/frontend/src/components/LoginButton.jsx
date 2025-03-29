@@ -21,6 +21,8 @@ const LoginButton = () => {
       console.log('Received auth URL:', data.auth_url);
       
       if (data.auth_url) {
+        // Store the current URL to redirect back after login
+        localStorage.setItem('returnTo', window.location.pathname);
         window.location.href = data.auth_url;
       } else {
         throw new Error('No auth URL received');
