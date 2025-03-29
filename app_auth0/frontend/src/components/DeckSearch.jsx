@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -15,47 +15,128 @@ import MenuBookIcon from '@mui/icons-material/MenuBook';
 import SearchIcon from '@mui/icons-material/Search';
 import { useNavigate } from 'react-router-dom';
 
-const DeckSearch = () => {
+const DeckSearch = ({ userInfo: propUserInfo, accessToken: propAccessToken }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [decks, setDecks] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Check authentication state on component mount
+    const checkAuth = async () => {
+      console.log('Checking authentication state:');
+      console.log('Access Token:', propAccessToken ? propAccessToken.substring(0, 20) + '...' : 'Not found');
+      console.log('User Info:', propUserInfo || 'Not found');
+      
+      if (propAccessToken && propUserInfo) {
+        setIsAuthenticated(true);
+        setUserInfo(propUserInfo);
+        
+        // Verify token is still valid
+        try {
+          console.log('Verifying token with Auth0...');
+          const response = await fetch('http://localhost:5001/userinfo', {
+            headers: {
+              'Authorization': `Bearer ${propAccessToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+          
+          if (!response.ok) {
+            console.error('Token verification failed:', response.status, response.statusText);
+            throw new Error('Token verification failed');
+          }
+          
+          const data = await response.json();
+          console.log('Token verification successful:', data);
+          setUserInfo(data.user);
+        } catch (err) {
+          console.error('Token verification error:', err);
+          // Clear invalid session
+          sessionStorage.removeItem('access_token');
+          localStorage.removeItem('user_info');
+          localStorage.removeItem('tokens');
+          setIsAuthenticated(false);
+          setUserInfo(null);
+          navigate('/');
+        }
+      } else {
+        console.log('No authentication found, redirecting to login');
+        setIsAuthenticated(false);
+        setUserInfo(null);
+      }
+    };
+
+    checkAuth();
+  }, [navigate, propAccessToken, propUserInfo]);
 
   const searchDecks = async () => {
     try {
       setLoading(true);
       setError(null);
       
-      // Get the access token from session storage
-      const accessToken = sessionStorage.getItem('access_token');
-      if (!accessToken) {
+      // Log all available information about the token and user
+      console.log('=== Search Request Debug Info ===');
+      console.log('Prop Access Token:', propAccessToken ? propAccessToken.substring(0, 20) + '...' : 'Not found');
+      console.log('Prop User Info:', propUserInfo);
+      console.log('Local User Info:', userInfo);
+      console.log('Is Authenticated:', isAuthenticated);
+      console.log('Session Storage Token:', sessionStorage.getItem('access_token')?.substring(0, 20) + '...');
+      console.log('Local Storage User Info:', localStorage.getItem('user_info'));
+      console.log('================================');
+      
+      if (!propAccessToken) {
+        console.error('No access token found in props');
         setError('Please log in to search decks');
         return;
       }
-
-      const response = await fetch(`http://localhost:5002/api/search-decks?q=${encodeURIComponent(searchQuery)}`, {
+      
+      // Create headers object with authorization
+      const headers = {
+        'Authorization': `Bearer ${propAccessToken}`,
+        'Content-Type': 'application/json',
+        'Accept': 'application/json'
+      };
+      
+      console.log('Request headers:', headers);
+      
+      const url = `http://localhost:5002/api/search-decks?q=${encodeURIComponent(searchQuery)}`;
+      console.log('Request URL:', url);
+      
+      const response = await fetch(url, {
         method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-          'Accept': 'application/json'
-        }
+        headers: headers,
+        credentials: 'include'  // Include credentials if using cookies
       });
+      
+      console.log('Response status:', response.status);
+      console.log('Response headers:', Object.fromEntries(response.headers.entries()));
       
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('Search request failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+          headers: Object.fromEntries(response.headers.entries())
+        });
+        
         if (response.status === 401) {
-          // Only clear data if it's a genuine authentication error
+          // Handle authentication errors
           if (errorData.error === "Token has expired") {
+            console.log('Token expired, clearing session');
             setError('Your session has expired. Please log in again.');
             sessionStorage.removeItem('access_token');
             localStorage.removeItem('user_info');
             localStorage.removeItem('tokens');
-            window.location.href = '/';
+            setIsAuthenticated(false);
+            setUserInfo(null);
+            navigate('/');
             return;
           }
-          // For other auth errors, try to refresh the token
           setError('Authentication error. Please try again.');
           return;
         }
@@ -63,8 +144,10 @@ const DeckSearch = () => {
       }
       
       const data = await response.json();
+      console.log('Search response:', data);
       setDecks(data);
     } catch (err) {
+      console.error('Search error:', err);
       setError(err instanceof Error ? err.message : 'An error occurred');
       setDecks([]);
     } finally {
@@ -78,9 +161,7 @@ const DeckSearch = () => {
     }
   };
 
-  const accessToken = sessionStorage.getItem('access_token');
-
-  if (!accessToken) {
+  if (!isAuthenticated) {
     return (
       <Box sx={{ 
         maxWidth: 1000, 
@@ -141,6 +222,13 @@ const DeckSearch = () => {
       bgcolor: '#ffffff',
       minHeight: '100vh'
     }}>
+      {/* Welcome Message */}
+      {userInfo && (
+        <Typography variant="h6" sx={{ mb: 3, color: '#333333' }}>
+          Welcome, {userInfo.email}!
+        </Typography>
+      )}
+
       {/* Search Bar */}
       <Box sx={{ 
         display: 'flex', 
