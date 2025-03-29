@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Box } from '@mui/material';
+import { Box, Typography } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import Header from './components/Header';
 import DeckSearch from './components/DeckSearch';
 import Profile from './components/Profile';
+import AnkiDeckViewer from './components/AnkiDeckViewer';
+import DeckHierarchyViewer from './components/DeckHierarchyViewer';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -108,38 +110,79 @@ function AppContent() {
         tokens={tokens}
         onLogout={clearAllData}
       />
-      <Routes>
-        <Route 
-          path="/" 
-          element={
-            (() => {
-              const accessToken = sessionStorage.getItem('access_token');
-              console.log('=== App.jsx Debug Info ===');
-              console.log('Current User Info:', userInfo);
-              console.log('Current Tokens:', tokens);
-              console.log('Access Token from Session:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
-              console.log('==========================');
-              
-              return (
-                <DeckSearch 
-                  userInfo={userInfo}
-                  accessToken={accessToken}
-                />
-              );
-            })()
-          } 
-        />
-        <Route 
-          path="/profile" 
-          element={
-            userInfo ? (
-              <Profile userInfo={userInfo} />
-            ) : (
-              <Navigate to="/" replace state={{ from: location }} />
-            )
-          } 
-        />
-      </Routes>
+      <Box sx={{ flex: 1 }}>
+        <Routes>
+          <Route 
+            path="/" 
+            element={
+              (() => {
+                const accessToken = sessionStorage.getItem('access_token');
+                console.log('=== App.jsx Debug Info ===');
+                console.log('Current User Info:', userInfo);
+                console.log('Current Tokens:', tokens);
+                console.log('Access Token from Session:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
+                console.log('==========================');
+                
+                return (
+                  <DeckSearch 
+                    userInfo={userInfo}
+                    accessToken={accessToken}
+                  />
+                );
+              })()
+            } 
+          />
+          <Route 
+            path="/profile" 
+            element={
+              userInfo ? (
+                <Profile userInfo={userInfo} />
+              ) : (
+                <Navigate to="/" replace state={{ from: location }} />
+              )
+            } 
+          />
+          <Route 
+            path="/deck/:deckId" 
+            element={
+              (() => {
+                const deck = location.state?.deck;
+                if (!deck) {
+                  return <Navigate to="/" replace />;
+                }
+                return <DeckHierarchyViewer deck={deck} />;
+              })()
+            } 
+          />
+          <Route 
+            path="/deck/:deckId/view" 
+            element={
+              (() => {
+                const deck = location.state?.deck;
+                if (!deck) {
+                  return <Navigate to="/" replace />;
+                }
+                return <AnkiDeckViewer />;
+              })()
+            } 
+          />
+        </Routes>
+      </Box>
+      <Box sx={{ 
+        mt: 'auto', 
+        pt: 4,
+        pb: 2,
+        borderTop: '1px solid #e0e0e0',
+        textAlign: 'center'
+      }}>
+        <Typography sx={{ 
+          color: '#666666',
+          fontSize: '0.875rem',
+          fontWeight: 300
+        }}>
+          © {new Date().getFullYear()} Magnus Kobbeltvedt Haga. All rights reserved.
+        </Typography>
+      </Box>
     </Box>
   );
 }

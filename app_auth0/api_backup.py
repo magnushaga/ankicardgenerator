@@ -1,9 +1,10 @@
 from flask import Blueprint, request, jsonify
-from anthropic import Anthropic
+from werkzeug.utils import secure_filename
 import os
 import uuid
 import json
-from datetime import datetime, timedelta
+from anthropic import Anthropic
+from datetime import datetime
 from models import (
     User, Textbook, Part, Chapter, Topic, Deck, Card,
     StudySession, CardReview
@@ -17,7 +18,7 @@ from jwt.algorithms import RSAAlgorithm
 from jwt_verify import requires_scope
 from permissions import requires_permission, requires_ownership
 from supabase_config import supabase
-from auth_decorators import requires_auth  # Import the auth decorator from the new module
+from auth_decorators import requires_auth
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,15 +26,6 @@ logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
-
-# Initialize Supabase client with service role key
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
-
-if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-    raise ValueError("Missing Supabase credentials")
-
-supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 api = Blueprint('api', __name__)
 
@@ -53,12 +45,17 @@ class TextbookAnalyzer:
                 raise
 
     def analyze_textbook(self, textbook_name, client=None):
-        """Analyze textbook title to determine subject area and requirements"""
+        """
+        Use Claude API to analyze a textbook's title and determine its subject area,
+        specialized formatting needs, and appropriate focus areas.
+        """
         logger.info(f"Analyzing subject area for: {textbook_name}")
         
+        # Use self.client if no client is provided
         if client is None:
             client = self.client
         
+        # Ensure we have a client
         if client is None:
             api_key = os.getenv('ANTHROPIC_API_KEY')
             client = Anthropic(api_key=api_key)
@@ -110,6 +107,7 @@ class TextbookAnalyzer:
             
             content = response.content[0].text
             
+            # Remove any markdown code blocks if present
             if content.startswith("```json") and content.endswith("```"):
                 content = content[7:-3]
             elif content.startswith("```") and content.endswith("```"):
@@ -140,6 +138,7 @@ class TextbookAnalyzer:
     def generate_structure(self, textbook_name, test_mode=False):
         """Generate textbook structure using Claude"""
         try:
+            # Create the structure prompt
             structure_prompt = f"""
             Create a detailed structure for the textbook "{textbook_name}".
             
@@ -166,6 +165,19 @@ class TextbookAnalyzer:
                                 "topics": [...]
                             }}
                         ]
+                    }},
+                    {{
+                        "title": "Part II: Advanced Topics",
+                        "chapters": [
+                            {{
+                                "title": "Chapter 3: Advanced Features",
+                                "topics": [...]
+                            }},
+                            {{
+                                "title": "Chapter 4: Best Practices",
+                                "topics": [...]
+                            }}
+                        ]
                     }}
                 ]
             }}
@@ -182,6 +194,7 @@ class TextbookAnalyzer:
                - latex_type specifying the type of notation needed
             """
 
+            # Make API call with updated system prompt
             response = self.client.messages.create(
                 model="claude-3-5-sonnet-20240620",
                 max_tokens=2000,
@@ -197,6 +210,7 @@ class TextbookAnalyzer:
                 ]
             )
             
+            # Extract and parse the JSON from the response
             content = response.content[0].text
             if content.startswith("```json") and content.endswith("```"):
                 content = content[7:-3]
@@ -206,20 +220,26 @@ class TextbookAnalyzer:
             structure = json.loads(content)
 
             # Fix and verify formatting
-            chapter_counter = 1
+            chapter_counter = 1  # Keep track of chapter numbers across all parts
             for i, part in enumerate(structure['parts']):
+                # Fix part numbering
                 if not part['title'].startswith(f"Part {self._to_roman(i+1)}:"):
                     part['title'] = f"Part {self._to_roman(i+1)}: {part['title'].split(':', 1)[-1].strip()}"
                 
+                # Fix chapter numbering
                 for chapter in part['chapters']:
+                    # Remove any double chapter numbering
                     if "Chapter" in chapter['title'].split(":", 1)[-1]:
+                        # Extract the actual title after any chapter numbers
                         actual_title = chapter['title'].split(":")[-1].strip()
                         chapter['title'] = f"Chapter {chapter_counter}: {actual_title}"
                     else:
+                        # Just ensure the chapter number is correct
                         chapter['title'] = f"Chapter {chapter_counter}: {chapter['title'].split(':', 1)[-1].strip()}"
                     
                     chapter_counter += 1
                     
+                    # Ensure each topic has required fields
                     for topic in chapter['topics']:
                         if 'requires_latex' not in topic:
                             topic['requires_latex'] = False
@@ -323,305 +343,8 @@ def test():
     """Test endpoint to verify API is working"""
     return jsonify({"message": "API is working!"})
 
-@api.route('/api/protected', methods=['GET'])
-@requires_auth
-def protected():
-    """Test endpoint to verify authentication is working"""
-    return jsonify({
-        "message": "Protected endpoint is working!",
-        "user": request.user
-    })
-
-@api.route('/api/user-decks', methods=['GET'])
-@requires_auth
-def get_user_decks():
-    """Get all decks for the authenticated user"""
-    try:
-        user_id = request.user['sub']
-        result = supabase.table('decks').select('*').eq('user_id', user_id).execute()
-        
-        return jsonify([{
-            'id': deck['id'],
-            'title': deck['title'],
-            'created_at': deck['created_at']
-        } for deck in result.data])
-        
-    except Exception as e:
-        logger.error(f"Error getting user decks: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks', methods=['POST'])
-@requires_auth
-def create_deck():
-    """Create a new deck for the authenticated user"""
-    try:
-        data = request.get_json()
-        title = data.get('title')
-        
-        if not title:
-            return jsonify({'error': 'title is required'}), 400
-            
-        deck_data = {
-            'id': str(uuid.uuid4()),
-            'user_id': request.user['sub'],
-            'title': title,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('decks').insert(deck_data).execute()
-        
-        return jsonify({
-            'id': result.data[0]['id'],
-            'title': result.data[0]['title'],
-            'created_at': result.data[0]['created_at']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error creating deck: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>', methods=['DELETE'])
-@requires_auth
-def delete_deck(deck_id):
-    """Delete a deck (if user owns it)"""
-    try:
-        # Check if user owns the deck
-        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
-        if not deck_result.data:
-            return jsonify({'error': 'Deck not found'}), 404
-            
-        deck = deck_result.data[0]
-        if deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Delete the deck
-        supabase.table('decks').delete().eq('id', deck_id).execute()
-        
-        return jsonify({'message': 'Deck deleted successfully'})
-        
-    except Exception as e:
-        logger.error(f"Error deleting deck: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/collaborate', methods=['POST'])
-@requires_auth
-@requires_permission('can_share')
-def add_collaborator(deck_id):
-    """Add a collaborator to a deck"""
-    try:
-        data = request.get_json()
-        user_id = data.get('user_id')
-        role = data.get('role', 'viewer')
-        
-        if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
-            
-        # Set permissions based on role
-        permissions = {
-            'owner': {'can_edit': True, 'can_share': True, 'can_delete': True},
-            'editor': {'can_edit': True, 'can_share': True, 'can_delete': False},
-            'viewer': {'can_edit': False, 'can_share': False, 'can_delete': False}
-        }
-        
-        if role not in permissions:
-            return jsonify({'error': 'Invalid role'}), 400
-            
-        collaboration_data = {
-            'id': str(uuid.uuid4()),
-            'deck_id': deck_id,
-            'user_id': user_id,
-            'role': role,
-            **permissions[role],
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('deck_collaborations').insert(collaboration_data).execute()
-        
-        return jsonify({
-            'id': str(result.data[0]['id']),
-            'role': result.data[0]['role']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error adding collaborator: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/live-decks', methods=['POST'])
-@requires_auth
-def create_live_deck():
-    """Create a new live deck from an existing deck"""
-    try:
-        data = request.get_json()
-        deck_id = data.get('deck_id')
-        name = data.get('name')
-        description = data.get('description')
-        
-        if not all([deck_id, name]):
-            return jsonify({'error': 'deck_id and name are required'}), 400
-            
-        # Check if user owns the deck
-        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
-        if not deck_result.data:
-            return jsonify({'error': 'Deck not found'}), 404
-            
-        deck = deck_result.data[0]
-        if deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Create live deck
-        live_deck_data = {
-            'id': str(uuid.uuid4()),
-            'user_id': request.user['sub'],
-            'deck_id': deck_id,
-            'name': name,
-            'description': description,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('live_decks').insert(live_deck_data).execute()
-        
-        return jsonify(result.data[0])
-        
-    except Exception as e:
-        logger.error(f"Error creating live deck: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/live-decks/<live_deck_id>/cards', methods=['GET'])
-@requires_auth
-def get_live_deck_cards(live_deck_id):
-    """Get all cards for a live deck with their states"""
-    try:
-        # Check if user owns the live deck
-        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
-        if not live_deck_result.data:
-            return jsonify({'error': 'Live deck not found'}), 404
-            
-        live_deck = live_deck_result.data[0]
-        if live_deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Get cards with their states
-        cards_result = supabase.table('user_card_states').select(
-            'card_id, is_active, next_review, interval, easiness, repetitions'
-        ).eq('live_deck_id', live_deck_id).execute()
-        
-        return jsonify(cards_result.data)
-        
-    except Exception as e:
-        logger.error(f"Error getting live deck cards: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/live-decks/<live_deck_id>/cards/<card_id>/toggle', methods=['POST'])
-@requires_auth
-def toggle_card_state(live_deck_id, card_id):
-    """Toggle a card's active state in a live deck"""
-    try:
-        # Check if user owns the live deck
-        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
-        if not live_deck_result.data:
-            return jsonify({'error': 'Live deck not found'}), 404
-            
-        live_deck = live_deck_result.data[0]
-        if live_deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Get current card state
-        card_state_result = supabase.table('user_card_states').select('*').eq(
-            'live_deck_id', live_deck_id
-        ).eq('card_id', card_id).execute()
-        
-        if not card_state_result.data:
-            return jsonify({'error': 'Card state not found'}), 404
-            
-        # Toggle the state
-        current_state = card_state_result.data[0]
-        new_state = not current_state['is_active']
-        
-        result = supabase.table('user_card_states').update({
-            'is_active': new_state
-        }).eq('live_deck_id', live_deck_id).eq('card_id', card_id).execute()
-        
-        return jsonify({
-            'card_id': card_id,
-            'is_active': new_state
-        })
-        
-    except Exception as e:
-        logger.error(f"Error toggling card state: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/analytics', methods=['GET'])
-@requires_auth
-def get_learning_analytics():
-    """Get learning analytics for the current user"""
-    try:
-        result = supabase.table('learning_analytics').select('*').eq(
-            'user_id', request.user['sub']
-        ).execute()
-        
-        return jsonify(result.data)
-        
-    except Exception as e:
-        logger.error(f"Error getting learning analytics: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/achievements', methods=['GET'])
-@requires_auth
-def get_achievements():
-    """Get all achievements for the current user"""
-    try:
-        result = supabase.table('achievements').select('*').eq(
-            'user_id', request.user['sub']
-        ).execute()
-        
-        return jsonify(result.data)
-        
-    except Exception as e:
-        logger.error(f"Error getting achievements: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/reminders', methods=['POST'])
-@requires_auth
-def create_study_reminder():
-    """Create a new study reminder"""
-    try:
-        data = request.get_json()
-        live_deck_id = data.get('live_deck_id')
-        reminder_time = data.get('reminder_time')
-        days_of_week = data.get('days_of_week')
-        notification_type = data.get('notification_type', 'in-app')
-        
-        if not all([live_deck_id, reminder_time, days_of_week]):
-            return jsonify({'error': 'live_deck_id, reminder_time, and days_of_week are required'}), 400
-            
-        # Check if user owns the live deck
-        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
-        if not live_deck_result.data:
-            return jsonify({'error': 'Live deck not found'}), 404
-            
-        live_deck = live_deck_result.data[0]
-        if live_deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        reminder_data = {
-            'id': str(uuid.uuid4()),
-            'user_id': request.user['sub'],
-            'live_deck_id': live_deck_id,
-            'reminder_time': reminder_time,
-            'days_of_week': days_of_week,
-            'notification_type': notification_type,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('study_reminders').insert(reminder_data).execute()
-        
-        return jsonify(result.data[0])
-        
-    except Exception as e:
-        logger.error(f"Error creating study reminder: {e}")
-        return jsonify({"error": str(e)}), 500
-
 @api.route('/api/analyze-textbook', methods=['POST'])
+@requires_auth
 def analyze_textbook():
     """Analyze a textbook's title to determine subject area and requirements"""
     data = request.get_json()
@@ -654,6 +377,7 @@ def analyze_textbook():
         return jsonify({"error": str(e), "fallback_analysis": default_analysis}), 500
 
 @api.route('/api/generate-textbook-structure', methods=['POST'])
+@requires_auth
 def generate_textbook_structure():
     """Generate a structured outline for a textbook"""
     data = request.get_json()
@@ -719,6 +443,7 @@ def generate_textbook_structure():
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/generate-cards', methods=['POST'])
+@requires_auth
 def generate_cards():
     """Generate flashcards for a specific topic"""
     data = request.get_json()
@@ -853,6 +578,7 @@ def review_card():
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/study-sessions', methods=['POST'])
+@requires_auth
 def create_study_session():
     """Create a new study session"""
     data = request.get_json()
@@ -881,6 +607,7 @@ def create_study_session():
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/study-sessions/<session_id>', methods=['PUT'])
+@requires_auth
 def end_study_session(session_id):
     """End a study session"""
     try:
@@ -917,6 +644,7 @@ def end_study_session(session_id):
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/decks/<deck_id>/due-cards', methods=['GET'])
+@requires_auth
 def get_due_cards(deck_id):
     """Get cards that are due for review"""
     try:
@@ -935,315 +663,4 @@ def get_due_cards(deck_id):
         
     except Exception as e:
         logger.error(f"Error getting due cards: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/search-decks', methods=['GET'])
-@requires_auth
-def search_decks():
-    """Search for decks with authentication"""
-    try:
-        query = request.args.get('q', '')
-        logger.info(f"Searching decks with query: {query}")
-        
-        # Log the entire request object for debugging
-        logger.info("Request object: %s", request.__dict__)
-        logger.info("Request user object: %s", getattr(request, 'user', None))
-        
-        # Get user info from the JWT token
-        if not hasattr(request, 'user'):
-            logger.error("No user information found in request")
-            return jsonify({"error": "User information not found"}), 401
-            
-        user_id = request.user.get('sub')
-        if not user_id:
-            logger.error("No user ID found in token")
-            return jsonify({"error": "User ID not found"}), 401
-            
-        logger.info(f"Searching decks for user: {user_id}")
-        
-        # Search decks in Supabase
-        result = supabase.table('decks').select('*').ilike('title', f'%{query}%').execute()
-        
-        if not result.data:
-            logger.info("No decks found matching query")
-            return jsonify([])
-            
-        # Format the response
-        decks = []
-        for deck in result.data:
-            deck_data = {
-                'id': deck['id'],
-                'title': deck['title'],
-                'user_id': deck['user_id'],
-                'created_at': deck['created_at'],
-                'cards': []  # You can populate this with actual cards if needed
-            }
-            decks.append(deck_data)
-            
-        logger.info(f"Found {len(decks)} decks matching query")
-        return jsonify(decks)
-        
-    except Exception as e:
-        logger.error(f"Error searching decks: {e}")
-        logger.error("Exception details:", exc_info=True)
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/live-decks/<live_deck_id>/parts', methods=['POST'])
-@requires_auth
-@requires_permission('can_edit')
-def add_part_to_live_deck(live_deck_id):
-    """Add a new part to a live deck"""
-    try:
-        data = request.get_json()
-        title = data.get('title')
-        description = data.get('description')
-        order_index = data.get('order_index')
-        
-        if not title:
-            return jsonify({'error': 'title is required'}), 400
-            
-        # Get the deck ID from the live deck
-        live_deck_result = supabase.table('live_decks').select('deck_id').eq('id', live_deck_id).execute()
-        if not live_deck_result.data:
-            return jsonify({'error': 'Live deck not found'}), 404
-            
-        deck_id = live_deck_result.data[0]['deck_id']
-        
-        # Get the next order index if not provided
-        if order_index is None:
-            last_part = supabase.table('parts').select('order_index').eq('deck_id', deck_id).order('order_index', desc=True).limit(1).execute()
-            order_index = (last_part.data[0]['order_index'] + 1) if last_part.data else 0
-            
-        part_data = {
-            'id': str(uuid.uuid4()),
-            'deck_id': deck_id,
-            'title': title,
-            'description': description,
-            'order_index': order_index,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('parts').insert(part_data).execute()
-        
-        return jsonify({
-            'id': str(result.data[0]['id']),
-            'title': result.data[0]['title'],
-            'description': result.data[0]['description'],
-            'order_index': result.data[0]['order_index']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error adding part: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/parts/<part_id>/chapters', methods=['POST'])
-@requires_auth
-@requires_permission('can_edit')
-def add_chapter_to_part(part_id):
-    """Add a new chapter to a part"""
-    try:
-        data = request.get_json()
-        title = data.get('title')
-        description = data.get('description')
-        order_index = data.get('order_index')
-        
-        if not title:
-            return jsonify({'error': 'title is required'}), 400
-            
-        # Get the next order index if not provided
-        if order_index is None:
-            last_chapter = supabase.table('chapters').select('order_index').eq('part_id', part_id).order('order_index', desc=True).limit(1).execute()
-            order_index = (last_chapter.data[0]['order_index'] + 1) if last_chapter.data else 0
-            
-        chapter_data = {
-            'id': str(uuid.uuid4()),
-            'part_id': part_id,
-            'title': title,
-            'description': description,
-            'order_index': order_index,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('chapters').insert(chapter_data).execute()
-        
-        return jsonify({
-            'id': str(result.data[0]['id']),
-            'title': result.data[0]['title'],
-            'description': result.data[0]['description'],
-            'order_index': result.data[0]['order_index']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error adding chapter: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/chapters/<chapter_id>/topics', methods=['POST'])
-@requires_auth
-@requires_permission('can_edit')
-def add_topic_to_chapter(chapter_id):
-    """Add a new topic to a chapter"""
-    try:
-        data = request.get_json()
-        title = data.get('title')
-        description = data.get('description')
-        order_index = data.get('order_index')
-        
-        if not title:
-            return jsonify({'error': 'title is required'}), 400
-            
-        # Get the next order index if not provided
-        if order_index is None:
-            last_topic = supabase.table('topics').select('order_index').eq('chapter_id', chapter_id).order('order_index', desc=True).limit(1).execute()
-            order_index = (last_topic.data[0]['order_index'] + 1) if last_topic.data else 0
-            
-        topic_data = {
-            'id': str(uuid.uuid4()),
-            'chapter_id': chapter_id,
-            'title': title,
-            'description': description,
-            'order_index': order_index,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('topics').insert(topic_data).execute()
-        
-        return jsonify({
-            'id': str(result.data[0]['id']),
-            'title': result.data[0]['title'],
-            'description': result.data[0]['description'],
-            'order_index': result.data[0]['order_index']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error adding topic: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/topics/<topic_id>/cards', methods=['POST'])
-@requires_auth
-@requires_permission('can_edit')
-def add_card_to_topic(topic_id):
-    """Add a new card to a topic"""
-    try:
-        data = request.get_json()
-        front = data.get('front')
-        back = data.get('back')
-        card_type = data.get('card_type', 'basic')
-        media_urls = data.get('media_urls', [])
-        tags = data.get('tags', [])
-        difficulty = data.get('difficulty', 'medium')
-        notes = data.get('notes')
-        
-        if not all([front, back]):
-            return jsonify({'error': 'front and back are required'}), 400
-            
-        card_data = {
-            'id': str(uuid.uuid4()),
-            'topic_id': topic_id,
-            'front': front,
-            'back': back,
-            'card_type': card_type,
-            'media_urls': media_urls,
-            'tags': tags,
-            'difficulty': difficulty,
-            'notes': notes,
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('cards').insert(card_data).execute()
-        
-        return jsonify({
-            'id': str(result.data[0]['id']),
-            'front': result.data[0]['front'],
-            'back': result.data[0]['back'],
-            'card_type': result.data[0]['card_type'],
-            'media_urls': result.data[0]['media_urls'],
-            'tags': result.data[0]['tags'],
-            'difficulty': result.data[0]['difficulty'],
-            'notes': result.data[0]['notes']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error adding card: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/cards', methods=['GET'])
-@requires_auth
-def get_deck_cards(deck_id):
-    """Get all cards for a specific deck with their context"""
-    try:
-        logger.info(f"Fetching cards for deck {deck_id}")
-        
-        # First, verify the deck exists and user has access
-        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
-        if not deck_result.data:
-            logger.error(f"Deck {deck_id} not found")
-            return jsonify({"error": "Deck not found"}), 404
-            
-        deck = deck_result.data[0]
-        
-        # Get all parts for the deck
-        parts_result = supabase.table('parts').select('*').eq('deck_id', deck_id).order('order_index').execute()
-        if not parts_result.data:
-            logger.info(f"No parts found for deck {deck_id}")
-            return jsonify([])
-            
-        # Initialize the response structure
-        deck_structure = {
-            'id': deck_id,
-            'title': deck['title'],
-            'parts': []
-        }
-        
-        # For each part, get its chapters
-        for part in parts_result.data:
-            part_data = {
-                'id': part['id'],
-                'title': part['title'],
-                'chapters': []
-            }
-            
-            # Get chapters for this part
-            chapters_result = supabase.table('chapters').select('*').eq('part_id', part['id']).order('order_index').execute()
-            
-            for chapter in chapters_result.data:
-                chapter_data = {
-                    'id': chapter['id'],
-                    'title': chapter['title'],
-                    'topics': []
-                }
-                
-                # Get topics for this chapter
-                topics_result = supabase.table('topics').select('*').eq('chapter_id', chapter['id']).order('order_index').execute()
-                
-                for topic in topics_result.data:
-                    topic_data = {
-                        'id': topic['id'],
-                        'title': topic['title'],
-                        'cards': []
-                    }
-                    
-                    # Get cards for this topic
-                    cards_result = supabase.table('cards').select('*').eq('topic_id', topic['id']).execute()
-                    
-                    for card in cards_result.data:
-                        card_data = {
-                            'id': card['id'],
-                            'front': card['front'],
-                            'back': card['back'],
-                            'created_at': card['created_at']
-                        }
-                        topic_data['cards'].append(card_data)
-                    
-                    chapter_data['topics'].append(topic_data)
-                
-                part_data['chapters'].append(chapter_data)
-            
-            deck_structure['parts'].append(part_data)
-            
-        logger.info(f"Successfully fetched deck structure with {len(deck_structure['parts'])} parts")
-        return jsonify(deck_structure)
-        
-    except Exception as e:
-        logger.error(f"Error fetching deck cards: {str(e)}")
-        logger.error("Exception details:", exc_info=True)
         return jsonify({"error": str(e)}), 500 

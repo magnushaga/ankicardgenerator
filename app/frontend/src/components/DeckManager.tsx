@@ -27,6 +27,24 @@ const DeckManager: React.FC = () => {
 
       if (!response.ok) throw new Error('Failed to search');
       const data = await response.json();
+      // Ensure parts array exists and is an array
+      if (!Array.isArray(data.parts)) {
+        console.warn('Deck data missing parts array:', data);
+        data.parts = [];
+      }
+      data.parts = data.parts.map((part: any) => ({
+        id: part.id || '',
+        title: part.title || 'Untitled Part',
+        chapters: Array.isArray(part.chapters) ? part.chapters.map((chapter: any) => ({
+          id: chapter.id || '',
+          title: chapter.title || 'Untitled Chapter',
+          topics: Array.isArray(chapter.topics) ? chapter.topics.map((topic: any) => ({
+            id: topic.id || '',
+            title: topic.title || 'Untitled Topic',
+            cards: Array.isArray(topic.cards) ? topic.cards : []
+          })) : []
+        })) : []
+      }));
       setResult(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
