@@ -7,6 +7,7 @@ import Profile from './components/Profile';
 import AnkiDeckViewer from './components/AnkiDeckViewer';
 import DeckHierarchyViewer from './components/DeckHierarchyViewer';
 import DeckViewer from './components/DeckViewer';
+import StudyDeck from './components/StudyDeck';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -172,6 +173,16 @@ function AppContent() {
             element={
               userInfo ? (
                 <DeckViewer />
+              ) : (
+                <Navigate to="/" replace state={{ from: location }} />
+              )
+            } 
+          />
+          <Route 
+            path="/deck/:deckId/study" 
+            element={
+              userInfo ? (
+                <StudyDeck />
               ) : (
                 <Navigate to="/" replace state={{ from: location }} />
               )

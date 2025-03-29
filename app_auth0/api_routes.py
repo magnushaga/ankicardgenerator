@@ -18,6 +18,7 @@ from jwt_verify import requires_scope
 from permissions import requires_permission, requires_ownership
 from supabase_config import supabase
 from auth_decorators import requires_auth  # Import the auth decorator from the new module
+from study.supermemo2 import SuperMemo2
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -784,9 +785,125 @@ def generate_cards():
         logger.error(f"Error generating cards: {e}")
         return jsonify({"error": str(e)}), 500
 
+@api.route('/api/study-sessions', methods=['POST'])
+@requires_auth
+def create_study_session():
+    """Create a new study session"""
+    try:
+        data = request.get_json()
+        deck_id = data.get('deck_id')
+        
+        if not deck_id:
+            return jsonify({'error': 'deck_id is required'}), 400
+            
+        # Create study session
+        session_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'deck_id': deck_id,
+            'started_at': datetime.utcnow().isoformat(),
+            'ended_at': None,
+            'cards_studied': 0,
+            'correct_answers': 0
+        }
+        
+        result = supabase.table('study_sessions').insert(session_data).execute()
+        
+        return jsonify({
+            'sessionId': str(result.data[0]['id']),
+            'deckId': str(result.data[0]['deck_id']),
+            'startedAt': result.data[0]['started_at']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating study session: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/study-sessions/<session_id>', methods=['PUT'])
+@requires_auth
+def end_study_session(session_id):
+    """End a study session and calculate statistics"""
+    try:
+        # Update session in Supabase
+        update_data = {
+            'ended_at': datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table('study_sessions').update(update_data).eq('id', session_id).execute()
+        session = result.data[0]
+        
+        # Get reviews for statistics
+        reviews_result = supabase.table('card_reviews').select('*').eq('session_id', session_id).execute()
+        reviews = reviews_result.data
+        
+        # Calculate statistics
+        total_cards = len(reviews)
+        total_time = sum(r['time_taken'] for r in reviews if r['time_taken'])
+        avg_quality = sum(r['quality'] for r in reviews) / total_cards if total_cards else 0
+        
+        # Update session statistics
+        supabase.table('study_sessions').update({
+            'cards_studied': total_cards,
+            'correct_answers': sum(1 for r in reviews if r['quality'] >= 3)
+        }).eq('id', session_id).execute()
+        
+        return jsonify({
+            'sessionId': str(session['id']),
+            'startedAt': session['started_at'],
+            'endedAt': session['ended_at'],
+            'statistics': {
+                'totalCards': total_cards,
+                'totalTimeMs': total_time,
+                'averageQuality': avg_quality
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error ending study session: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/decks/<deck_id>/due-cards', methods=['GET'])
+@requires_auth
+def get_due_cards(deck_id):
+    """Get cards that are due for review"""
+    try:
+        # First verify the deck exists and user has access
+        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
+        if not deck_result.data:
+            return jsonify({'error': 'Deck not found'}), 404
+            
+        deck = deck_result.data[0]
+        if deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get all cards for the deck with their states
+        now = datetime.utcnow().isoformat()
+        result = supabase.table('cards').select(
+            'id, front, back, next_review, interval, easiness, repetitions'
+        ).eq('deck_id', deck_id).lte('next_review', now).execute()
+        
+        # Format the response
+        cards = []
+        for card in result.data:
+            card_data = {
+                'id': str(card['id']),
+                'front': card['front'],
+                'back': card['back'],
+                'nextReview': card['next_review'],
+                'interval': card['interval'],
+                'easiness': card['easiness'],
+                'repetitions': card['repetitions']
+            }
+            cards.append(card_data)
+            
+        return jsonify(cards)
+        
+    except Exception as e:
+        logger.error(f"Error getting due cards: {e}")
+        return jsonify({"error": str(e)}), 500
+
 @api.route('/api/review-card', methods=['POST'])
 @requires_auth
-@requires_permission('can_edit')
 def review_card():
     """Record a card review with SuperMemo2 algorithm"""
     try:
@@ -806,10 +923,14 @@ def review_card():
             
         card = card_result.data[0]
         
-        # Update card using SuperMemo2 algorithm
-        new_interval = card['interval'] * (1 + (quality - 3) * 0.1)
-        new_easiness = max(1.3, card['easiness'] + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)))
-        new_repetitions = card['repetitions'] + 1
+        # Apply SuperMemo2 algorithm
+        sm2 = SuperMemo2()
+        new_easiness, new_interval, new_repetitions = sm2.calculate_values(
+            quality,
+            card['easiness'],
+            card['interval'],
+            card['repetitions']
+        )
         
         # Update card in Supabase
         update_data = {
@@ -850,91 +971,6 @@ def review_card():
         
     except Exception as e:
         logger.error(f"Error recording card review: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/study-sessions', methods=['POST'])
-def create_study_session():
-    """Create a new study session"""
-    data = request.get_json()
-    deck_id = data.get('deck_id')
-    
-    if not deck_id:
-        return jsonify({'error': 'deck_id is required'}), 400
-        
-    try:
-        session_data = {
-            'id': str(uuid.uuid4()),
-            'deck_id': deck_id,
-            'started_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('study_sessions').insert(session_data).execute()
-        
-        return jsonify({
-            'sessionId': str(result.data[0]['id']),
-            'deckId': str(result.data[0]['deck_id']),
-            'startedAt': result.data[0]['started_at']
-        })
-        
-    except Exception as e:
-        logger.error(f"Error creating study session: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/study-sessions/<session_id>', methods=['PUT'])
-def end_study_session(session_id):
-    """End a study session"""
-    try:
-        # Update session in Supabase
-        update_data = {
-            'ended_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('study_sessions').update(update_data).eq('id', session_id).execute()
-        session = result.data[0]
-        
-        # Get reviews for statistics
-        reviews_result = supabase.table('card_reviews').select('*').eq('session_id', session_id).execute()
-        reviews = reviews_result.data
-        
-        # Calculate statistics
-        total_cards = len(reviews)
-        total_time = sum(r['time_taken'] for r in reviews if r['time_taken'])
-        avg_quality = sum(r['quality'] for r in reviews) / total_cards if total_cards else 0
-        
-        return jsonify({
-            'sessionId': str(session['id']),
-            'startedAt': session['started_at'],
-            'endedAt': session['ended_at'],
-            'statistics': {
-                'totalCards': total_cards,
-                'totalTimeMs': total_time,
-                'averageQuality': avg_quality
-            }
-        })
-        
-    except Exception as e:
-        logger.error(f"Error ending study session: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/due-cards', methods=['GET'])
-def get_due_cards(deck_id):
-    """Get cards that are due for review"""
-    try:
-        now = datetime.utcnow().isoformat()
-        result = supabase.table('cards').select('*').eq('deck_id', deck_id).lte('next_review', now).execute()
-        
-        return jsonify([{
-            'id': str(card['id']),
-            'front': card['front'],
-            'back': card['back'],
-            'nextReview': card['next_review'],
-            'interval': card['interval'],
-            'easiness': card['easiness'],
-            'repetitions': card['repetitions']
-        } for card in result.data])
-        
-    except Exception as e:
-        logger.error(f"Error getting due cards: {e}")
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/search-decks', methods=['GET'])

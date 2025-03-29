@@ -18,10 +18,11 @@ import {
 } from '@mui/material';
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore';
 import ExpandLessIcon from '@mui/icons-material/ExpandLess';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 
 const DeckViewer = () => {
   const { deckId } = useParams();
+  const navigate = useNavigate();
   const [deck, setDeck] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -104,9 +105,27 @@ const DeckViewer = () => {
 
   return (
     <Box sx={{ p: 3, maxWidth: 1200, margin: 'auto' }}>
-      <Typography variant="h4" sx={{ mb: 4 }}>
-        {deck.title}
-      </Typography>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+        <Typography variant="h4">
+          {deck.title}
+        </Typography>
+        <Button
+          variant="contained"
+          onClick={() => navigate(`/deck/${deckId}/study`)}
+          sx={{
+            borderRadius: 0,
+            textTransform: 'none',
+            px: 4,
+            py: 1.5,
+            backgroundColor: '#1976d2',
+            '&:hover': {
+              backgroundColor: '#1565c0',
+            },
+          }}
+        >
+          Study Deck
+        </Button>
+      </Box>
 
       {deck.parts.map((part) => (
         <Paper key={part.id} sx={{ mb: 3, p: 2 }}>
