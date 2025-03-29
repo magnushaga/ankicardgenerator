@@ -1,6 +1,5 @@
 import os
-from sqlalchemy import create_engine, text
-from urllib.parse import quote_plus
+from supabase import create_client, Client
 from dotenv import load_dotenv
 import logging
 import uuid
@@ -13,152 +12,73 @@ logger = logging.getLogger(__name__)
 # Load environment variables
 load_dotenv()
 
-# Get Supabase project reference from URL
+# Initialize Supabase client with service role key
 SUPABASE_URL = os.getenv('SUPABASE_URL')
-if not SUPABASE_URL:
-    raise ValueError("SUPABASE_URL environment variable is not set")
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')  # Use service role key
 
-# Extract project reference from URL
-project_ref = SUPABASE_URL.split('//')[1].split('.')[0]
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    raise ValueError("SUPABASE_URL and SUPABASE_SERVICE_KEY environment variables are required")
 
-# Construct PostgreSQL connection string
-DB_USER = "postgres"
-DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
-DB_HOST = f"db.{project_ref}.supabase.co"
-DB_PORT = "5432"
-DB_NAME = "postgres"
-
-# Create the database URL with password properly encoded
-encoded_password = quote_plus(DB_PASSWORD) if DB_PASSWORD else ""
-SQLALCHEMY_DATABASE_URL = f"postgresql://{DB_USER}:{encoded_password}@{DB_HOST}:{DB_PORT}/{DB_NAME}?sslmode=require"
-
-def get_db_engine():
-    """Create and return a SQLAlchemy engine"""
-    return create_engine(
-        SQLALCHEMY_DATABASE_URL,
-        connect_args={
-            'connect_timeout': 10,
-            'application_name': 'user_management'
-        }
-    )
+# Initialize Supabase client with service role key to bypass RLS
+supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 def create_or_update_user(auth0_user):
     """
-    Create or update a user in the database based on Auth0 user data
+    Create or update a user in Supabase based on Auth0 user data
     Returns the user data if successful, None if failed
     """
     try:
-        engine = get_db_engine()
-        
+        # Extract user data from Auth0 profile
+        user_data = {
+            'id': str(uuid.uuid4()),  # Generate a UUID for the user
+            'email': auth0_user['email'],
+            'username': auth0_user.get('nickname', auth0_user['email'].split('@')[0]),
+            'auth0_id': auth0_user['sub'],
+            'created_at': datetime.utcnow().isoformat(),
+            'last_login': datetime.utcnow().isoformat(),
+            'is_active': True,
+            'email_verified': auth0_user.get('email_verified', False),
+            'preferred_study_time': None,
+            'notification_preferences': {},
+            'study_goals': {}
+        }
+
         # Check if user exists
-        check_sql = """
-        SELECT id, email, username, auth0_id, created_at, last_login, 
-               is_active, email_verified, preferred_study_time, 
-               notification_preferences, study_goals
-        FROM users 
-        WHERE auth0_id = :auth0_id;
-        """
-        
-        with engine.connect() as connection:
-            result = connection.execute(text(check_sql), {'auth0_id': auth0_user['sub']}).first()
+        existing_user = supabase.table('users').select('*').eq('auth0_id', auth0_user['sub']).execute()
+
+        if not existing_user.data:
+            # Create new user
+            logger.info(f"Creating new user: {user_data['email']}")
+            result = supabase.table('users').insert(user_data).execute()
+            if not result.data:
+                logger.error("Failed to create user in Supabase")
+                return None
+            return result.data[0]
+        else:
+            # Update existing user
+            existing_id = existing_user.data[0]['id']
+            logger.info(f"Updating existing user: {user_data['email']}")
+            result = supabase.table('users').update({
+                'email': user_data['email'],
+                'username': user_data['username'],
+                'last_login': user_data['last_login'],
+                'email_verified': user_data['email_verified']
+            }).eq('id', existing_id).execute()
             
-            if result:
-                # Update existing user
-                update_sql = """
-                UPDATE users 
-                SET email = :email,
-                    username = :username,
-                    last_login = CURRENT_TIMESTAMP,
-                    email_verified = :email_verified
-                WHERE auth0_id = :auth0_id
-                RETURNING *;
-                """
-                
-                user_data = {
-                    'email': auth0_user['email'],
-                    'username': auth0_user.get('nickname', auth0_user['email'].split('@')[0]),
-                    'auth0_id': auth0_user['sub'],
-                    'email_verified': auth0_user.get('email_verified', False)
-                }
-                
-                result = connection.execute(text(update_sql), user_data).first()
-                logger.info(f"Updated existing user: {result['email']}")
-                
-            else:
-                # Create new user
-                insert_sql = """
-                INSERT INTO users (
-                    id, email, username, auth0_id, created_at, 
-                    last_login, is_active, email_verified,
-                    preferred_study_time, notification_preferences, study_goals
-                ) VALUES (
-                    :id, :email, :username, :auth0_id, CURRENT_TIMESTAMP,
-                    CURRENT_TIMESTAMP, true, :email_verified,
-                    null, '{}', '{}'
-                ) RETURNING *;
-                """
-                
-                user_data = {
-                    'id': str(uuid.uuid4()),
-                    'email': auth0_user['email'],
-                    'username': auth0_user.get('nickname', auth0_user['email'].split('@')[0]),
-                    'auth0_id': auth0_user['sub'],
-                    'email_verified': auth0_user.get('email_verified', False)
-                }
-                
-                result = connection.execute(text(insert_sql), user_data).first()
-                logger.info(f"Created new user: {result['email']}")
-            
-            return {
-                'id': result['id'],
-                'email': result['email'],
-                'username': result['username'],
-                'auth0_id': result['auth0_id'],
-                'created_at': result['created_at'].isoformat(),
-                'last_login': result['last_login'].isoformat() if result['last_login'] else None,
-                'is_active': result['is_active'],
-                'email_verified': result['email_verified'],
-                'preferred_study_time': result['preferred_study_time'],
-                'notification_preferences': result['notification_preferences'],
-                'study_goals': result['study_goals']
-            }
-            
+            if not result.data:
+                logger.error("Failed to update user in Supabase")
+                return None
+            return result.data[0]
+
     except Exception as e:
-        logger.error(f"Error creating/updating user: {str(e)}")
+        logger.error(f"Error in create_or_update_user: {str(e)}")
         return None
 
 def get_user_by_auth0_id(auth0_id):
-    """Get user by Auth0 ID"""
+    """Get user by Auth0 ID from Supabase"""
     try:
-        engine = get_db_engine()
-        
-        sql = """
-        SELECT id, email, username, auth0_id, created_at, last_login, 
-               is_active, email_verified, preferred_study_time, 
-               notification_preferences, study_goals
-        FROM users 
-        WHERE auth0_id = :auth0_id;
-        """
-        
-        with engine.connect() as connection:
-            result = connection.execute(text(sql), {'auth0_id': auth0_id}).first()
-            
-            if result:
-                return {
-                    'id': result['id'],
-                    'email': result['email'],
-                    'username': result['username'],
-                    'auth0_id': result['auth0_id'],
-                    'created_at': result['created_at'].isoformat(),
-                    'last_login': result['last_login'].isoformat() if result['last_login'] else None,
-                    'is_active': result['is_active'],
-                    'email_verified': result['email_verified'],
-                    'preferred_study_time': result['preferred_study_time'],
-                    'notification_preferences': result['notification_preferences'],
-                    'study_goals': result['study_goals']
-                }
-            return None
-            
+        result = supabase.table('users').select('*').eq('auth0_id', auth0_id).execute()
+        return result.data[0] if result.data else None
     except Exception as e:
         logger.error(f"Error getting user: {str(e)}")
         return None

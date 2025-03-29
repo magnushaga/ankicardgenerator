@@ -8,15 +8,29 @@ from models import (
     User, Textbook, Part, Chapter, Topic, Deck, Card,
     StudySession, CardReview
 )
-from supabase_config import supabase
+from supabase import create_client
+from dotenv import load_dotenv
 import logging
 from functools import wraps
 import jwt
 from jwt.algorithms import RSAAlgorithm
+from jwt_verify import requires_auth, requires_scope
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Load environment variables
+load_dotenv()
+
+# Initialize Supabase client with service role key
+SUPABASE_URL = os.getenv('SUPABASE_URL')
+SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+
+if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+    raise ValueError("Missing Supabase credentials")
+
+supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
 api = Blueprint('api', __name__)
 
@@ -301,30 +315,265 @@ class TextbookAnalyzer:
                 }
             ]
 
-def requires_auth(f):
-    @wraps(f)
-    def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        if not auth_header:
-            return jsonify({"error": "No authorization header"}), 401
+@api.route('/api/test', methods=['GET'])
+def test():
+    """Test endpoint to verify API is working"""
+    return jsonify({"message": "API server is working!"})
+
+@api.route('/api/protected', methods=['GET'])
+@requires_auth
+def protected():
+    """Test endpoint to verify authentication is working"""
+    return jsonify({
+        "message": "Protected endpoint is working!",
+        "user": request.user
+    })
+
+@api.route('/api/user-decks', methods=['GET'])
+@requires_auth
+def get_user_decks():
+    """Get all decks for the authenticated user"""
+    try:
+        user_id = request.user['sub']
+        result = supabase.table('decks').select('*').eq('user_id', user_id).execute()
         
-        try:
-            token = auth_header.split(' ')[1]
-            # Verify the token with Auth0
-            jwks_url = f'https://{os.getenv("AUTH0_DOMAIN")}/.well-known/jwks.json'
-            jwks_client = jwt.PyJWKClient(jwks_url)
-            signing_key = jwks_client.get_signing_key_from_jwt(token)
-            payload = jwt.decode(
-                token,
-                signing_key.key,
-                algorithms=["RS256"]
-            )
-            request.user = payload
-            return f(*args, **kwargs)
+        return jsonify([{
+            'id': deck['id'],
+            'title': deck['title'],
+            'created_at': deck['created_at']
+        } for deck in result.data])
+        
+    except Exception as e:
+        logger.error(f"Error getting user decks: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/decks', methods=['POST'])
+@requires_auth
+def create_deck():
+    """Create a new deck for the authenticated user"""
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        
+        if not title:
+            return jsonify({'error': 'title is required'}), 400
+            
+        deck_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'title': title,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table('decks').insert(deck_data).execute()
+        
+        return jsonify({
+            'id': result.data[0]['id'],
+            'title': result.data[0]['title'],
+            'created_at': result.data[0]['created_at']
+        })
+        
+    except Exception as e:
+        logger.error(f"Error creating deck: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/decks/<deck_id>', methods=['DELETE'])
+@requires_auth
+def delete_deck(deck_id):
+    """Delete a deck (if user owns it)"""
+    try:
+        # Check if user owns the deck
+        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
+        if not deck_result.data:
+            return jsonify({'error': 'Deck not found'}), 404
+            
+        deck = deck_result.data[0]
+        if deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Delete the deck
+        supabase.table('decks').delete().eq('id', deck_id).execute()
+        
+        return jsonify({'message': 'Deck deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error deleting deck: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/live-decks', methods=['POST'])
+@requires_auth
+def create_live_deck():
+    """Create a new live deck from an existing deck"""
+    try:
+        data = request.get_json()
+        deck_id = data.get('deck_id')
+        name = data.get('name')
+        description = data.get('description')
+        
+        if not all([deck_id, name]):
+            return jsonify({'error': 'deck_id and name are required'}), 400
+            
+        # Check if user owns the deck
+        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
+        if not deck_result.data:
+            return jsonify({'error': 'Deck not found'}), 404
+            
+        deck = deck_result.data[0]
+        if deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Create live deck
+        live_deck_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'deck_id': deck_id,
+            'name': name,
+            'description': description,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table('live_decks').insert(live_deck_data).execute()
+        
+        return jsonify(result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Error creating live deck: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/live-decks/<live_deck_id>/cards', methods=['GET'])
+@requires_auth
+def get_live_deck_cards(live_deck_id):
+    """Get all cards for a live deck with their states"""
+    try:
+        # Check if user owns the live deck
+        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
+        if not live_deck_result.data:
+            return jsonify({'error': 'Live deck not found'}), 404
+            
+        live_deck = live_deck_result.data[0]
+        if live_deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get cards with their states
+        cards_result = supabase.table('user_card_states').select(
+            'card_id, is_active, next_review, interval, easiness, repetitions'
+        ).eq('live_deck_id', live_deck_id).execute()
+        
+        return jsonify(cards_result.data)
+        
+    except Exception as e:
+        logger.error(f"Error getting live deck cards: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/live-decks/<live_deck_id>/cards/<card_id>/toggle', methods=['POST'])
+@requires_auth
+def toggle_card_state(live_deck_id, card_id):
+    """Toggle a card's active state in a live deck"""
+    try:
+        # Check if user owns the live deck
+        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
+        if not live_deck_result.data:
+            return jsonify({'error': 'Live deck not found'}), 404
+            
+        live_deck = live_deck_result.data[0]
+        if live_deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Get current card state
+        card_state_result = supabase.table('user_card_states').select('*').eq(
+            'live_deck_id', live_deck_id
+        ).eq('card_id', card_id).execute()
+        
+        if not card_state_result.data:
+            return jsonify({'error': 'Card state not found'}), 404
+            
+        # Toggle the state
+        current_state = card_state_result.data[0]
+        new_state = not current_state['is_active']
+        
+        result = supabase.table('user_card_states').update({
+            'is_active': new_state
+        }).eq('live_deck_id', live_deck_id).eq('card_id', card_id).execute()
+        
+        return jsonify({
+            'card_id': card_id,
+            'is_active': new_state
+        })
+        
+    except Exception as e:
+        logger.error(f"Error toggling card state: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/analytics', methods=['GET'])
+@requires_auth
+def get_learning_analytics():
+    """Get learning analytics for the current user"""
+    try:
+        result = supabase.table('learning_analytics').select('*').eq(
+            'user_id', request.user['sub']
+        ).execute()
+        
+        return jsonify(result.data)
+        
+    except Exception as e:
+        logger.error(f"Error getting learning analytics: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/achievements', methods=['GET'])
+@requires_auth
+def get_achievements():
+    """Get all achievements for the current user"""
+    try:
+        result = supabase.table('achievements').select('*').eq(
+            'user_id', request.user['sub']
+        ).execute()
+        
+        return jsonify(result.data)
+        
         except Exception as e:
-            logger.error(f"Error verifying token: {str(e)}")
-            return jsonify({"error": "Invalid token"}), 401
-    return decorated
+        logger.error(f"Error getting achievements: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/reminders', methods=['POST'])
+@requires_auth
+def create_study_reminder():
+    """Create a new study reminder"""
+    try:
+        data = request.get_json()
+        live_deck_id = data.get('live_deck_id')
+        reminder_time = data.get('reminder_time')
+        days_of_week = data.get('days_of_week')
+        notification_type = data.get('notification_type', 'in-app')
+        
+        if not all([live_deck_id, reminder_time, days_of_week]):
+            return jsonify({'error': 'live_deck_id, reminder_time, and days_of_week are required'}), 400
+            
+        # Check if user owns the live deck
+        live_deck_result = supabase.table('live_decks').select('*').eq('id', live_deck_id).execute()
+        if not live_deck_result.data:
+            return jsonify({'error': 'Live deck not found'}), 404
+            
+        live_deck = live_deck_result.data[0]
+        if live_deck['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        reminder_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'live_deck_id': live_deck_id,
+            'reminder_time': reminder_time,
+            'days_of_week': days_of_week,
+            'notification_type': notification_type,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        
+        result = supabase.table('study_reminders').insert(reminder_data).execute()
+        
+        return jsonify(result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Error creating study reminder: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @api.route('/api/analyze-textbook', methods=['POST'])
 def analyze_textbook():
