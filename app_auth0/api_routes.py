@@ -5,8 +5,8 @@ import uuid
 import json
 from datetime import datetime, timedelta
 from models import (
-    User, Textbook, Part, Chapter, Topic, Deck, Card,
-    StudySession, CardReview
+    Users, Textbooks, Parts, Chapters, Topics, Decks, Cards,
+    StudySessions, CardReviews
 )
 from supabase import create_client
 from dotenv import load_dotenv
@@ -15,10 +15,14 @@ from functools import wraps
 import jwt
 from jwt.algorithms import RSAAlgorithm
 from jwt_verify import requires_scope
-from permissions import requires_permission, requires_ownership
+from access_control import (
+    requires_permission, requires_role, assign_role, remove_role,
+    ResourceType, Permission, Role
+)
 from supabase_config import supabase
-from auth_decorators import requires_auth  # Import the auth decorator from the new module
+from auth_decorators import requires_auth
 from study.supermemo2 import SuperMemo2
+from subscription_management import SubscriptionManager, SubscriptionTier, SubscriptionStatus
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -36,7 +40,12 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
+# Create blueprints
 api = Blueprint('api', __name__)
+subscription_routes = Blueprint('subscription_routes', __name__)
+
+# Initialize subscription manager
+subscription_manager = SubscriptionManager()
 
 class TextbookAnalyzer:
     def __init__(self):
@@ -383,8 +392,9 @@ def create_deck():
 
 @api.route('/api/decks/<deck_id>', methods=['DELETE'])
 @requires_auth
+@requires_permission(Permission.DELETE)
 def delete_deck(deck_id):
-    """Delete a deck (if user owns it)"""
+    """Delete a deck"""
     try:
         # Check if user owns the deck
         deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
@@ -406,7 +416,7 @@ def delete_deck(deck_id):
 
 @api.route('/api/decks/<deck_id>/collaborate', methods=['POST'])
 @requires_auth
-@requires_permission('can_share')
+@requires_permission(Permission.SHARE)
 def add_collaborator(deck_id):
     """Add a collaborator to a deck"""
     try:
@@ -417,34 +427,51 @@ def add_collaborator(deck_id):
         if not user_id:
             return jsonify({'error': 'user_id is required'}), 400
             
-        # Set permissions based on role
-        permissions = {
-            'owner': {'can_edit': True, 'can_share': True, 'can_delete': True},
-            'editor': {'can_edit': True, 'can_share': True, 'can_delete': False},
-            'viewer': {'can_edit': False, 'can_share': False, 'can_delete': False}
-        }
-        
-        if role not in permissions:
+        try:
+            role_enum = Role(role)
+        except ValueError:
             return jsonify({'error': 'Invalid role'}), 400
             
-        collaboration_data = {
-            'id': str(uuid.uuid4()),
-            'deck_id': deck_id,
-            'user_id': user_id,
-            'role': role,
-            **permissions[role],
-            'created_at': datetime.utcnow().isoformat()
-        }
-        
-        result = supabase.table('deck_collaborations').insert(collaboration_data).execute()
-        
+        result = assign_role(user_id, ResourceType.DECK, deck_id, role_enum)
+        if not result:
+            return jsonify({'error': 'Failed to assign role'}), 500
+            
         return jsonify({
-            'id': str(result.data[0]['id']),
-            'role': result.data[0]['role']
+            'id': str(result['id']),
+            'role': result['role']
         })
         
     except Exception as e:
         logger.error(f"Error adding collaborator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/decks/<deck_id>/collaborate/<user_id>', methods=['DELETE'])
+@requires_auth
+@requires_permission(Permission.SHARE)
+def remove_collaborator(deck_id, user_id):
+    """Remove a collaborator from a deck"""
+    try:
+        success = remove_role(user_id, ResourceType.DECK, deck_id)
+        if not success:
+            return jsonify({'error': 'Failed to remove collaborator'}), 500
+            
+        return jsonify({'message': 'Collaborator removed successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error removing collaborator: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/decks/<deck_id>/edit', methods=['POST'])
+@requires_auth
+@requires_permission(Permission.WRITE)
+def edit_deck(deck_id):
+    """Edit a deck"""
+    try:
+        data = request.get_json()
+        # ... existing edit deck logic ...
+        
+    except Exception as e:
+        logger.error(f"Error editing deck: {e}")
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/live-decks', methods=['POST'])
@@ -794,29 +821,69 @@ def create_study_session():
         deck_id = data.get('deck_id')
         
         if not deck_id:
+            logger.error("No deck_id provided in request")
             return jsonify({'error': 'deck_id is required'}), 400
+            
+        # Get user from database using Auth0 ID
+        user_result = supabase.table('users').select('id').eq('auth0_id', request.user['sub']).execute()
+        if not user_result.data:
+            logger.error(f"User not found in database for Auth0 ID: {request.user['sub']}")
+            return jsonify({'error': 'User not found in database'}), 404
+            
+        user_id = user_result.data[0]['id']
+        logger.info(f"Found user ID: {user_id} for Auth0 ID: {request.user['sub']}")
+        
+        # Verify deck exists and user has access
+        deck_result = supabase.table('decks').select('*, deck_shares(*)').eq('id', deck_id).execute()
+        if not deck_result.data:
+            logger.error(f"Deck not found: {deck_id}")
+            return jsonify({'error': 'Deck not found'}), 404
+            
+        deck = deck_result.data[0]
+        
+        # Check if user has access to the deck
+        has_access = False
+        
+        # Check if user owns the deck
+        if deck['user_id'] == user_id:
+            has_access = True
+        # Check if deck is public
+        elif deck.get('is_public', False):
+            has_access = True
+        # Check if deck is shared with user
+        elif deck.get('deck_shares'):
+            for share in deck['deck_shares']:
+                if share['user_id'] == user_id:
+                    has_access = True
+                    break
+        
+        if not has_access:
+            logger.error(f"User {user_id} does not have access to deck {deck_id}")
+            return jsonify({'error': 'Unauthorized'}), 403
             
         # Create study session
         session_data = {
             'id': str(uuid.uuid4()),
-            'user_id': request.user['sub'],
+            'user_id': user_id,  # Use database user ID
             'deck_id': deck_id,
             'started_at': datetime.utcnow().isoformat(),
-            'ended_at': None,
             'cards_studied': 0,
             'correct_answers': 0
         }
         
+        logger.info(f"Creating study session: {session_data}")
         result = supabase.table('study_sessions').insert(session_data).execute()
         
-        return jsonify({
-            'sessionId': str(result.data[0]['id']),
-            'deckId': str(result.data[0]['deck_id']),
-            'startedAt': result.data[0]['started_at']
-        })
+        if not result.data:
+            logger.error("Failed to create study session")
+            return jsonify({'error': 'Failed to create study session'}), 500
+            
+        logger.info(f"Successfully created study session: {result.data[0]}")
+        return jsonify(result.data[0])
         
     except Exception as e:
         logger.error(f"Error creating study session: {e}")
+        logger.error("Exception details:", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/study-sessions/<session_id>', methods=['PUT'])
@@ -867,13 +934,41 @@ def end_study_session(session_id):
 def get_due_cards(deck_id):
     """Get cards that are due for review"""
     try:
+        # Get user from database using Auth0 ID
+        user_result = supabase.table('users').select('id').eq('auth0_id', request.user['sub']).execute()
+        if not user_result.data:
+            logger.error(f"User not found in database for Auth0 ID: {request.user['sub']}")
+            return jsonify({'error': 'User not found in database'}), 404
+            
+        user_id = user_result.data[0]['id']
+        logger.info(f"Found user ID: {user_id} for Auth0 ID: {request.user['sub']}")
+            
         # First verify the deck exists and user has access
-        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
+        deck_result = supabase.table('decks').select('*, deck_shares(*)').eq('id', deck_id).execute()
         if not deck_result.data:
+            logger.error(f"Deck not found: {deck_id}")
             return jsonify({'error': 'Deck not found'}), 404
             
         deck = deck_result.data[0]
-        if deck['user_id'] != request.user['sub']:
+        
+        # Check if user has access to the deck
+        has_access = False
+        
+        # Check if user owns the deck
+        if deck['user_id'] == user_id:
+            has_access = True
+        # Check if deck is public
+        elif deck.get('is_public', False):
+            has_access = True
+        # Check if deck is shared with user
+        elif deck.get('deck_shares'):
+            for share in deck['deck_shares']:
+                if share['user_id'] == user_id:
+                    has_access = True
+                    break
+        
+        if not has_access:
+            logger.error(f"User {user_id} does not have access to deck {deck_id}")
             return jsonify({'error': 'Unauthorized'}), 403
             
         # Get all cards for the deck with their states
@@ -896,10 +991,12 @@ def get_due_cards(deck_id):
             }
             cards.append(card_data)
             
+        logger.info(f"Found {len(cards)} due cards for deck {deck_id}")
         return jsonify(cards)
         
     except Exception as e:
         logger.error(f"Error getting due cards: {e}")
+        logger.error("Exception details:", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/review-card', methods=['POST'])
@@ -914,14 +1011,30 @@ def review_card():
         time_taken = data.get('time_taken')
         
         if not all([card_id, session_id, quality is not None]):
+            logger.error("Missing required fields in review request")
             return jsonify({'error': 'card_id, session_id, and quality are required'}), 400
         
+        # Get user from database using Auth0 ID
+        user_result = supabase.table('users').select('id').eq('auth0_id', request.user['sub']).execute()
+        if not user_result.data:
+            logger.error(f"User not found in database for Auth0 ID: {request.user['sub']}")
+            return jsonify({'error': 'User not found in database'}), 404
+            
+        user_id = user_result.data[0]['id']
+        logger.info(f"Found user ID: {user_id} for Auth0 ID: {request.user['sub']}")
+        
         # Get card data from Supabase
-        card_result = supabase.table('cards').select('*').eq('id', card_id).execute()
+        card_result = supabase.table('cards').select('*, decks!inner(*)').eq('id', card_id).execute()
         if not card_result.data:
+            logger.error(f"Card not found: {card_id}")
             return jsonify({'error': 'Card not found'}), 404
             
         card = card_result.data[0]
+        
+        # Verify user has access to the deck
+        if card['decks']['user_id'] != user_id:
+            logger.error(f"User {user_id} does not have access to card {card_id}")
+            return jsonify({'error': 'Unauthorized'}), 403
         
         # Apply SuperMemo2 algorithm
         sm2 = SuperMemo2()
@@ -940,6 +1053,7 @@ def review_card():
             'next_review': (datetime.utcnow() + timedelta(days=new_interval)).isoformat()
         }
         
+        logger.info(f"Updating card {card_id} with new values: {update_data}")
         result = supabase.table('cards').update(update_data).eq('id', card_id).execute()
         updated_card = result.data[0]
         
@@ -959,6 +1073,7 @@ def review_card():
             'new_repetitions': new_repetitions
         }
         
+        logger.info(f"Recording review: {review_data}")
         supabase.table('card_reviews').insert(review_data).execute()
         
         return jsonify({
@@ -971,6 +1086,7 @@ def review_card():
         
     except Exception as e:
         logger.error(f"Error recording card review: {e}")
+        logger.error("Exception details:", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/search-decks', methods=['GET'])
@@ -1204,6 +1320,7 @@ def add_card_to_topic(topic_id):
 
 @api.route('/api/decks/<deck_id>/cards', methods=['GET'])
 @requires_auth
+@requires_permission(Permission.READ)
 def get_deck_cards(deck_id):
     """Get all cards for a specific deck with their context"""
     try:
@@ -1282,4 +1399,255 @@ def get_deck_cards(deck_id):
     except Exception as e:
         logger.error(f"Error fetching deck cards: {str(e)}")
         logger.error("Exception details:", exc_info=True)
-        return jsonify({"error": str(e)}), 500 
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/course-materials', methods=['POST'])
+@requires_auth
+def upload_course_material():
+    """Upload a new course material"""
+    try:
+        if 'file' not in request.files:
+            return jsonify({'error': 'No file provided'}), 400
+            
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+            
+        # Get additional metadata from form data
+        title = request.form.get('title')
+        description = request.form.get('description')
+        material_type = request.form.get('material_type')
+        tags = request.form.getlist('tags')
+        metadata = json.loads(request.form.get('metadata', '{}'))
+        
+        if not all([title, material_type]):
+            return jsonify({'error': 'title and material_type are required'}), 400
+            
+        # TODO: Implement file upload to storage (e.g., S3, Supabase Storage)
+        # For now, we'll just store the file path
+        file_path = f"course_materials/{request.user['sub']}/{file.filename}"
+        
+        material_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'title': title,
+            'description': description,
+            'material_type': material_type,
+            'file_path': file_path,
+            'file_size': 0,  # TODO: Get actual file size
+            'mime_type': file.content_type,
+            'tags': tags,
+            'metadata': metadata
+        }
+        
+        result = supabase.table('course_materials').insert(material_data).execute()
+        
+        return jsonify(result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Error uploading course material: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/course-materials', methods=['GET'])
+@requires_auth
+def get_course_materials():
+    """Get all course materials for the current user"""
+    try:
+        result = supabase.table('course_materials').select('*').eq(
+            'user_id', request.user['sub']
+        ).execute()
+        
+        return jsonify(result.data)
+        
+    except Exception as e:
+        logger.error(f"Error getting course materials: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/course-materials/<material_id>', methods=['DELETE'])
+@requires_auth
+def delete_course_material(material_id):
+    """Delete a course material"""
+    try:
+        # Check if user owns the material
+        material_result = supabase.table('course_materials').select('*').eq('id', material_id).execute()
+        if not material_result.data:
+            return jsonify({'error': 'Material not found'}), 404
+            
+        material = material_result.data[0]
+        if material['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Delete the material
+        supabase.table('course_materials').delete().eq('id', material_id).execute()
+        
+        return jsonify({'message': 'Material deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error deleting course material: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/study-resources', methods=['POST'])
+@requires_auth
+def create_study_resource():
+    """Create a new study resource"""
+    try:
+        data = request.get_json()
+        title = data.get('title')
+        content = data.get('content')
+        resource_type = data.get('resource_type')
+        source_material_id = data.get('source_material_id')
+        tags = data.get('tags', [])
+        metadata = data.get('metadata', {})
+        
+        if not all([title, content, resource_type]):
+            return jsonify({'error': 'title, content, and resource_type are required'}), 400
+            
+        # If source_material_id is provided, verify it exists and user owns it
+        if source_material_id:
+            material_result = supabase.table('course_materials').select('*').eq('id', source_material_id).execute()
+            if not material_result.data:
+                return jsonify({'error': 'Source material not found'}), 404
+                
+            material = material_result.data[0]
+            if material['user_id'] != request.user['sub']:
+                return jsonify({'error': 'Unauthorized'}), 403
+        
+        resource_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'title': title,
+            'content': content,
+            'resource_type': resource_type,
+            'source_material_id': source_material_id,
+            'tags': tags,
+            'metadata': metadata
+        }
+        
+        result = supabase.table('study_resources').insert(resource_data).execute()
+        
+        return jsonify(result.data[0])
+        
+    except Exception as e:
+        logger.error(f"Error creating study resource: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/study-resources', methods=['GET'])
+@requires_auth
+def get_study_resources():
+    """Get all study resources for the current user"""
+    try:
+        result = supabase.table('study_resources').select('*').eq(
+            'user_id', request.user['sub']
+        ).execute()
+        
+        return jsonify(result.data)
+        
+    except Exception as e:
+        logger.error(f"Error getting study resources: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/study-resources/<resource_id>', methods=['DELETE'])
+@requires_auth
+def delete_study_resource(resource_id):
+    """Delete a study resource"""
+    try:
+        # Check if user owns the resource
+        resource_result = supabase.table('study_resources').select('*').eq('id', resource_id).execute()
+        if not resource_result.data:
+            return jsonify({'error': 'Resource not found'}), 404
+            
+        resource = resource_result.data[0]
+        if resource['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Delete the resource
+        supabase.table('study_resources').delete().eq('id', resource_id).execute()
+        
+        return jsonify({'message': 'Resource deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error deleting study resource: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/generate-resource', methods=['POST'])
+@requires_auth
+def generate_study_resource():
+    """Generate a study resource from course material using GPT"""
+    try:
+        data = request.get_json()
+        material_id = data.get('material_id')
+        generation_type = data.get('generation_type')
+        prompt = data.get('prompt')
+        
+        if not all([material_id, generation_type, prompt]):
+            return jsonify({'error': 'material_id, generation_type, and prompt are required'}), 400
+            
+        # Verify material exists and user owns it
+        material_result = supabase.table('course_materials').select('*').eq('id', material_id).execute()
+        if not material_result.data:
+            return jsonify({'error': 'Material not found'}), 404
+            
+        material = material_result.data[0]
+        if material['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        # Create a study resource first
+        resource_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'title': f"Generated {generation_type} for {material['title']}",
+            'content': None,  # Will be updated after generation
+            'resource_type': generation_type,
+            'source_material_id': material_id
+        }
+        
+        resource_result = supabase.table('study_resources').insert(resource_data).execute()
+        resource = resource_result.data[0]
+        
+        # Create generation record
+        generation_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': request.user['sub'],
+            'resource_id': resource['id'],
+            'status': 'pending',
+            'generation_type': generation_type,
+            'prompt': prompt
+        }
+        
+        generation_result = supabase.table('resource_generations').insert(generation_data).execute()
+        generation = generation_result.data[0]
+        
+        # TODO: Implement actual GPT generation
+        # For now, return a mock response
+        return jsonify({
+            'resource': resource,
+            'generation': generation,
+            'message': 'Generation started'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating study resource: {e}")
+        return jsonify({"error": str(e)}), 500
+
+@api.route('/api/generations/<generation_id>', methods=['GET'])
+@requires_auth
+def get_generation_status(generation_id):
+    """Get the status of a resource generation"""
+    try:
+        result = supabase.table('resource_generations').select('*').eq('id', generation_id).execute()
+        
+        if not result.data:
+            return jsonify({'error': 'Generation not found'}), 404
+            
+        generation = result.data[0]
+        if generation['user_id'] != request.user['sub']:
+            return jsonify({'error': 'Unauthorized'}), 403
+            
+        return jsonify(generation)
+        
+    except Exception as e:
+        logger.error(f"Error getting generation status: {e}")
+        return jsonify({"error": str(e)}), 500
+
+# Register subscription routes with the main api blueprint
+api.register_blueprint(subscription_routes, url_prefix='/subscriptions') 
