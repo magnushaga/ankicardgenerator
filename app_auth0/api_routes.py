@@ -40,9 +40,7 @@ if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
 
 supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
 
-# Create blueprints
 api = Blueprint('api', __name__)
-subscription_routes = Blueprint('subscription_routes', __name__)
 
 # Initialize subscription manager
 subscription_manager = SubscriptionManager()
@@ -1325,6 +1323,7 @@ def get_deck_cards(deck_id):
     """Get all cards for a specific deck with their context"""
     try:
         logger.info(f"Fetching cards for deck {deck_id}")
+        logger.info(f"User ID: {request.user['sub']}")
         
         # First, verify the deck exists and user has access
         deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
@@ -1333,6 +1332,15 @@ def get_deck_cards(deck_id):
             return jsonify({"error": "Deck not found"}), 404
             
         deck = deck_result.data[0]
+        logger.info(f"Found deck: {deck['title']}")
+        
+        # Check if user has access to this deck
+        user_role = get_user_role(request.user['sub'], ResourceType.DECK, deck_id)
+        if not user_role:
+            logger.error(f"User {request.user['sub']} does not have access to deck {deck_id}")
+            return jsonify({"error": "Unauthorized access to deck"}), 403
+            
+        logger.info(f"User role for deck: {user_role.value}")
         
         # Get all parts for the deck
         parts_result = supabase.table('parts').select('*').eq('deck_id', deck_id).order('order_index').execute()
@@ -1649,5 +1657,119 @@ def get_generation_status(generation_id):
         logger.error(f"Error getting generation status: {e}")
         return jsonify({"error": str(e)}), 500
 
+# Create subscription routes blueprint
+subscription_routes = Blueprint('subscription_routes', __name__)
+
 # Register subscription routes with the main api blueprint
-api.register_blueprint(subscription_routes, url_prefix='/subscriptions') 
+api.register_blueprint(subscription_routes, url_prefix='/subscriptions')
+
+# Subscription routes
+@subscription_routes.route('/', methods=['POST'])
+@requires_auth
+def create_subscription():
+    """Create a new subscription"""
+    try:
+        data = request.get_json()
+        tier = data.get('tier')
+        payment_method_id = data.get('payment_method_id')
+        
+        if not tier or not payment_method_id:
+            return jsonify({"error": "Missing required fields"}), 400
+            
+        try:
+            tier_enum = SubscriptionTier(tier)
+        except ValueError:
+            return jsonify({"error": "Invalid subscription tier"}), 400
+            
+        result = subscription_manager.create_subscription(
+            user_id=request.user['sub'],
+            tier=tier_enum,
+            payment_method_id=payment_method_id
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error creating subscription: {e}")
+        return jsonify({"error": "Failed to create subscription"}), 500
+
+@subscription_routes.route('/<subscription_id>', methods=['PUT'])
+@requires_auth
+def update_subscription(subscription_id):
+    """Update an existing subscription"""
+    try:
+        data = request.get_json()
+        tier = data.get('tier')
+        
+        if not tier:
+            return jsonify({"error": "Missing tier"}), 400
+            
+        try:
+            tier_enum = SubscriptionTier(tier)
+        except ValueError:
+            return jsonify({"error": "Invalid subscription tier"}), 400
+            
+        result = subscription_manager.update_subscription(
+            subscription_id=subscription_id,
+            tier=tier_enum
+        )
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error updating subscription: {e}")
+        return jsonify({"error": "Failed to update subscription"}), 500
+
+@subscription_routes.route('/<subscription_id>', methods=['DELETE'])
+@requires_auth
+def cancel_subscription(subscription_id):
+    """Cancel a subscription"""
+    try:
+        result = subscription_manager.cancel_subscription(subscription_id)
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error canceling subscription: {e}")
+        return jsonify({"error": "Failed to cancel subscription"}), 500
+
+@subscription_routes.route('/current', methods=['GET'])
+@requires_auth
+def get_current_subscription():
+    """Get user's current subscription"""
+    try:
+        subscription = subscription_manager.get_subscription(request.user['sub'])
+        if subscription:
+            return jsonify(subscription)
+        return jsonify({"tier": "free"})
+        
+    except Exception as e:
+        logger.error(f"Error getting current subscription: {e}")
+        return jsonify({"error": "Failed to get subscription"}), 500
+
+@subscription_routes.route('/features', methods=['GET'])
+@requires_auth
+def get_subscription_features():
+    """Get available features for user's subscription tier"""
+    try:
+        tier = subscription_manager.get_subscription_tier(request.user['sub'])
+        features = subscription_manager.has_feature_access(request.user['sub'])
+        return jsonify({
+            "tier": tier.value,
+            "features": features
+        })
+        
+    except Exception as e:
+        logger.error(f"Error getting subscription features: {e}")
+        return jsonify({"error": "Failed to get subscription features"}), 500
+
+@subscription_routes.route('/webhook', methods=['POST'])
+def handle_stripe_webhook():
+    """Handle Stripe webhook events"""
+    try:
+        event = request.get_json()
+        result = subscription_manager.handle_webhook(event)
+        return jsonify(result)
+        
+    except Exception as e:
+        logger.error(f"Error handling webhook: {e}")
+        return jsonify({"error": "Failed to handle webhook"}), 500 

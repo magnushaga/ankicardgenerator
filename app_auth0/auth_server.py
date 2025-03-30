@@ -13,6 +13,7 @@ import logging
 import urllib.parse
 from user_management import create_or_update_user, get_user_by_auth0_id
 from api_routes import api
+from admin_routes import admin
 from datetime import datetime
 
 # Configure logging first, before any other code
@@ -37,12 +38,23 @@ CORS(app,
              "expose_headers": ["Content-Type", "Authorization"],
              "supports_credentials": True,
              "max_age": 3600
+         },
+         r"/api/admin/*": {
+             "origins": ["http://localhost:5173"],
+             "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+             "allow_headers": ["Content-Type", "Authorization", "Accept"],
+             "expose_headers": ["Content-Type", "Authorization"],
+             "supports_credentials": True,
+             "max_age": 3600
          }
      }
 )
 
 # Register the API routes blueprint
 app.register_blueprint(api, url_prefix='/api')
+
+# Register the admin routes blueprint
+app.register_blueprint(admin, url_prefix='/api/admin')
 
 # Handle OPTIONS requests
 @app.route('/', methods=['OPTIONS'])
