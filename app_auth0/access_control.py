@@ -8,6 +8,7 @@ from enum import Enum
 from datetime import datetime
 from typing import Optional, Dict, List
 from subscription_management import SubscriptionManager, SubscriptionTier, TIER_FEATURES
+from permission_store import permission_store, Permission, ResourceType
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,166 +61,56 @@ class Role(Enum):
 # Initialize subscription manager
 subscription_manager = SubscriptionManager()
 
-def get_user_role(user_id: str, resource_type: ResourceType, resource_id: str) -> Optional[Role]:
-    """Get user's role for a specific resource"""
+def get_user_role(user_id: str) -> str:
+    """Get the role of a user."""
     try:
-        if resource_type == ResourceType.DECK:
-            # Check if user owns the deck
-            deck_result = supabase.table('decks').select('*').eq('id', resource_id).execute()
-            if deck_result.data and deck_result.data[0]['user_id'] == user_id:
-                return Role.OWNER
-            
-            # Check collaboration role
-            collab_result = supabase.table('deck_collaborations').select('*').eq(
-                'deck_id', resource_id
-            ).eq('user_id', user_id).execute()
-            
-            if collab_result.data:
-                return Role(collab_result.data[0]['role'])
-            
-            return None
-            
-        elif resource_type == ResourceType.LIVE_DECK:
-            # Check if user owns the live deck
-            live_deck_result = supabase.table('live_decks').select('*').eq('id', resource_id).execute()
-            if live_deck_result.data and live_deck_result.data[0]['user_id'] == user_id:
-                return Role.OWNER
-            
-            return None
-            
-        elif resource_type in [ResourceType.PART, ResourceType.CHAPTER, ResourceType.TOPIC, ResourceType.CARD]:
-            # Get the parent deck ID
-            deck_id = get_parent_deck_id(resource_type, resource_id)
-            if deck_id:
-                return get_user_role(user_id, ResourceType.DECK, deck_id)
-            
-            return None
-            
-        return None
-        
+        # Check if user has admin permission on any resource
+        for resource_type in ResourceType:
+            if permission_store.has_permission(user_id, resource_type.value, "*", Permission.ADMIN):
+                return "admin"
+        return "user"
     except Exception as e:
-        logger.error(f"Error getting user role: {e}")
-        return None
+        logger.error(f"Error getting user role: {str(e)}")
+        return "user"
 
-def get_parent_deck_id(resource_type: ResourceType, resource_id: str) -> Optional[str]:
-    """Get the parent deck ID for a resource"""
-    try:
-        if resource_type == ResourceType.PART:
-            result = supabase.table('parts').select('deck_id').eq('id', resource_id).execute()
-        elif resource_type == ResourceType.CHAPTER:
-            result = supabase.table('chapters').select('part_id').eq('id', resource_id).execute()
-            if result.data:
-                part_result = supabase.table('parts').select('deck_id').eq('id', result.data[0]['part_id']).execute()
-                return part_result.data[0]['deck_id'] if part_result.data else None
-        elif resource_type == ResourceType.TOPIC:
-            result = supabase.table('topics').select('chapter_id').eq('id', resource_id).execute()
-            if result.data:
-                chapter_result = supabase.table('chapters').select('part_id').eq('id', result.data[0]['chapter_id']).execute()
-                if chapter_result.data:
-                    part_result = supabase.table('parts').select('deck_id').eq('id', chapter_result.data[0]['part_id']).execute()
-                    return part_result.data[0]['deck_id'] if part_result.data else None
-        elif resource_type == ResourceType.CARD:
-            result = supabase.table('cards').select('topic_id').eq('id', resource_id).execute()
-            if result.data:
-                topic_result = supabase.table('topics').select('chapter_id').eq('id', result.data[0]['topic_id']).execute()
-                if topic_result.data:
-                    chapter_result = supabase.table('chapters').select('part_id').eq('id', topic_result.data[0]['chapter_id']).execute()
-                    if chapter_result.data:
-                        part_result = supabase.table('parts').select('deck_id').eq('id', chapter_result.data[0]['part_id']).execute()
-                        return part_result.data[0]['deck_id'] if part_result.data else None
-        
-        return None
-    except Exception as e:
-        logger.error(f"Error getting parent deck ID: {e}")
-        return None
+def get_parent_deck_id(resource_type: str, resource_id: str) -> str:
+    """Get the parent deck ID for a resource."""
+    # This function would typically query the database to get the parent deck ID
+    # For now, we'll return None as we're using in-memory storage
+    return None
 
-def has_permission(user_id: str, resource_type: ResourceType, resource_id: str, required_permission: Permission) -> bool:
-    """Check if user has the required permission for a resource"""
-    try:
-        # First check subscription-based permissions
-        if required_permission in [
-            Permission.CREATE_LIVE_DECK,
-            Permission.EDIT_LIVE_DECK,
-            Permission.USE_AI_FEATURES,
-            Permission.USE_MEDIA,
-            Permission.USE_ANALYTICS,
-            Permission.USE_EXPORT,
-            Permission.USE_IMPORT,
-            Permission.USE_API,
-            Permission.USE_PRIORITY_SUPPORT
-        ]:
-            feature = required_permission.value.replace('use_', '')
-            return subscription_manager.has_feature_access(user_id, feature)
+def has_permission(user_id: str, resource_type: str, resource_id: str, permission: Permission) -> bool:
+    """Check if a user has a specific permission on a resource."""
+    return permission_store.has_permission(user_id, resource_type, resource_id, permission)
 
-        # Then check role-based permissions
-        role = get_user_role(user_id, resource_type, resource_id)
-        if not role:
-            return False
-
-        # Map permissions to roles
-        role_permissions = {
-            Role.OWNER: {
-                Permission.READ: True,
-                Permission.WRITE: True,
-                Permission.DELETE: True,
-                Permission.SHARE: True,
-                Permission.ADMIN: True
-            },
-            Role.EDITOR: {
-                Permission.READ: True,
-                Permission.WRITE: True,
-                Permission.DELETE: False,
-                Permission.SHARE: True,
-                Permission.ADMIN: False
-            },
-            Role.VIEWER: {
-                Permission.READ: True,
-                Permission.WRITE: False,
-                Permission.DELETE: False,
-                Permission.SHARE: False,
-                Permission.ADMIN: False
-            },
-            Role.ADMIN: {
-                Permission.READ: True,
-                Permission.WRITE: True,
-                Permission.DELETE: True,
-                Permission.SHARE: True,
-                Permission.ADMIN: True
-            }
-        }
-
-        return role_permissions[role].get(required_permission, False)
-
-    except Exception as e:
-        logger.error(f"Error checking permission: {e}")
-        return False
-
-def requires_permission(permission: Permission):
-    """Decorator to require specific permissions for routes"""
+def requires_permission(permission: Permission, resource_type: str = None, resource_id: str = None):
+    """Decorator to check if a user has the required permission."""
     def decorator(f):
         @wraps(f)
-        def decorated(*args, **kwargs):
-            if not hasattr(request, 'user'):
-                return jsonify({"error": "No authenticated user"}), 401
-
-            user_id = request.user['sub']
-            resource_type = kwargs.get('resource_type')
-            resource_id = kwargs.get('resource_id')
-
-            if not resource_type or not resource_id:
-                return jsonify({"error": "Resource type and ID required"}), 400
-
+        def decorated_function(*args, **kwargs):
             try:
-                resource_type_enum = ResourceType(resource_type)
-                permission_enum = Permission(permission)
-            except ValueError:
-                return jsonify({"error": "Invalid resource type or permission"}), 400
+                # Get user ID from the request
+                user_id = request.user_id if hasattr(request, 'user_id') else None
+                if not user_id:
+                    logger.error("No user ID found in request")
+                    return jsonify({"error": "Unauthorized"}), 401
 
-            if not has_permission(user_id, resource_type_enum, resource_id, permission_enum):
-                return jsonify({"error": "Insufficient permissions"}), 403
+                # If resource_type and resource_id are not provided, try to get them from kwargs
+                actual_resource_type = resource_type or kwargs.get('resource_type')
+                actual_resource_id = resource_id or kwargs.get('resource_id')
 
-            return f(*args, **kwargs)
-        return decorated
+                # Check if user has the required permission
+                if permission_store.has_permission(user_id, actual_resource_type, actual_resource_id, permission):
+                    return f(*args, **kwargs)
+                else:
+                    logger.warning(f"User {user_id} does not have permission {permission} on {actual_resource_type}:{actual_resource_id}")
+                    return jsonify({"error": "Forbidden"}), 403
+
+            except Exception as e:
+                logger.error(f"Error checking permission: {str(e)}")
+                return jsonify({"error": "Internal server error"}), 500
+
+        return decorated_function
     return decorator
 
 def requires_role(role: Role):
@@ -243,8 +134,8 @@ def requires_role(role: Role):
             except ValueError:
                 return jsonify({"error": "Invalid resource type or role"}), 400
 
-            user_role = get_user_role(user_id, resource_type_enum, resource_id)
-            if not user_role or user_role != required_role:
+            user_role = get_user_role(user_id)
+            if not user_role or user_role != required_role.value:
                 return jsonify({"error": "Insufficient role"}), 403
 
             return f(*args, **kwargs)

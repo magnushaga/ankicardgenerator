@@ -23,6 +23,7 @@ from supabase_config import supabase
 from auth_decorators import requires_auth
 from study.supermemo2 import SuperMemo2
 from subscription_management import SubscriptionManager, SubscriptionTier, SubscriptionStatus
+from permission_store import permission_store
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -390,88 +391,17 @@ def create_deck():
         logger.error(f"Error creating deck: {e}")
         return jsonify({"error": str(e)}), 500
 
-@api.route('/api/decks/<deck_id>', methods=['DELETE'])
+@api.route('/api/decks/<deck_id>/parts/<part_id>/chapters/<chapter_id>/topics/<topic_id>/cards/<card_id>', methods=['PUT'])
 @requires_auth
-@requires_permission(Permission.DELETE)
-def delete_deck(deck_id):
-    """Delete a deck"""
-    try:
-        # Check if user owns the deck
-        deck_result = supabase.table('decks').select('*').eq('id', deck_id).execute()
-        if not deck_result.data:
-            return jsonify({'error': 'Deck not found'}), 404
-            
-        deck = deck_result.data[0]
-        if deck['user_id'] != request.user['sub']:
-            return jsonify({'error': 'Unauthorized'}), 403
-            
-        # Delete the deck
-        supabase.table('decks').delete().eq('id', deck_id).execute()
-        
-        return jsonify({'message': 'Deck deleted successfully'})
-        
-    except Exception as e:
-        logger.error(f"Error deleting deck: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/collaborate', methods=['POST'])
-@requires_auth
-@requires_permission(Permission.SHARE)
-def add_collaborator(deck_id):
-    """Add a collaborator to a deck"""
+@requires_permission(Permission.WRITE, resource_type='card', resource_id='card_id')
+def update_card(deck_id, part_id, chapter_id, topic_id, card_id):
+    """Update a card"""
     try:
         data = request.get_json()
-        user_id = data.get('user_id')
-        role = data.get('role', 'viewer')
-        
-        if not user_id:
-            return jsonify({'error': 'user_id is required'}), 400
-            
-        try:
-            role_enum = Role(role)
-        except ValueError:
-            return jsonify({'error': 'Invalid role'}), 400
-            
-        result = assign_role(user_id, ResourceType.DECK, deck_id, role_enum)
-        if not result:
-            return jsonify({'error': 'Failed to assign role'}), 500
-            
-        return jsonify({
-            'id': str(result['id']),
-            'role': result['role']
-        })
+        # ... existing edit part logic ...
         
     except Exception as e:
-        logger.error(f"Error adding collaborator: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/collaborate/<user_id>', methods=['DELETE'])
-@requires_auth
-@requires_permission(Permission.SHARE)
-def remove_collaborator(deck_id, user_id):
-    """Remove a collaborator from a deck"""
-    try:
-        success = remove_role(user_id, ResourceType.DECK, deck_id)
-        if not success:
-            return jsonify({'error': 'Failed to remove collaborator'}), 500
-            
-        return jsonify({'message': 'Collaborator removed successfully'})
-        
-    except Exception as e:
-        logger.error(f"Error removing collaborator: {e}")
-        return jsonify({"error": str(e)}), 500
-
-@api.route('/api/decks/<deck_id>/edit', methods=['POST'])
-@requires_auth
-@requires_permission(Permission.WRITE)
-def edit_deck(deck_id):
-    """Edit a deck"""
-    try:
-        data = request.get_json()
-        # ... existing edit deck logic ...
-        
-    except Exception as e:
-        logger.error(f"Error editing deck: {e}")
+        logger.error(f"Error editing topic: {e}")
         return jsonify({"error": str(e)}), 500
 
 @api.route('/api/live-decks', methods=['POST'])
@@ -1320,7 +1250,7 @@ def add_card_to_topic(topic_id):
 
 @api.route('/api/decks/<deck_id>/cards', methods=['GET'])
 @requires_auth
-@requires_permission(Permission.READ)
+@requires_permission(Permission.READ, resource_type='deck', resource_id='deck_id')
 def get_deck_cards(deck_id):
     """Get all cards for a specific deck with their context"""
     try:
@@ -1648,6 +1578,95 @@ def get_generation_status(generation_id):
     except Exception as e:
         logger.error(f"Error getting generation status: {e}")
         return jsonify({"error": str(e)}), 500
+
+@api.route('/api/admin/permissions', methods=['GET'])
+@requires_auth
+@requires_permission(Permission.ADMIN)
+def get_all_permissions():
+    """Get all permissions in the system."""
+    try:
+        permissions = {
+            'user_permissions': permission_store.user_permissions,
+            'resource_owners': permission_store.resource_owners
+        }
+        return jsonify(permissions)
+    except Exception as e:
+        logger.error(f"Error getting permissions: {str(e)}")
+        return jsonify({'error': 'Failed to get permissions'}), 500
+
+@api.route('/api/admin/permissions', methods=['POST'])
+@requires_auth
+@requires_permission(Permission.ADMIN)
+def add_permission():
+    """Add a new permission for a user on a resource."""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        resource_type = data.get('resource_type')
+        resource_id = data.get('resource_id')
+        permission = data.get('permission')
+
+        if not all([user_id, resource_type, resource_id, permission]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        permission_store.set_permission(user_id, resource_type, resource_id, permission)
+        return jsonify({'message': 'Permission added successfully'})
+    except Exception as e:
+        logger.error(f"Error adding permission: {str(e)}")
+        return jsonify({'error': 'Failed to add permission'}), 500
+
+@api.route('/api/admin/permissions', methods=['DELETE'])
+@requires_auth
+@requires_permission(Permission.ADMIN)
+def remove_permission():
+    """Remove a permission for a user on a resource."""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        resource_type = data.get('resource_type')
+        resource_id = data.get('resource_id')
+        permission = data.get('permission')
+
+        if not all([user_id, resource_type, resource_id, permission]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        permission_store.remove_permission(user_id, resource_type, resource_id, permission)
+        return jsonify({'message': 'Permission removed successfully'})
+    except Exception as e:
+        logger.error(f"Error removing permission: {str(e)}")
+        return jsonify({'error': 'Failed to remove permission'}), 500
+
+@api.route('/api/admin/permissions/owner', methods=['POST'])
+@requires_auth
+@requires_permission(Permission.ADMIN)
+def set_resource_owner():
+    """Set the owner of a resource."""
+    try:
+        data = request.get_json()
+        user_id = data.get('user_id')
+        resource_type = data.get('resource_type')
+        resource_id = data.get('resource_id')
+
+        if not all([user_id, resource_type, resource_id]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        permission_store.set_resource_owner(user_id, resource_type, resource_id)
+        return jsonify({'message': 'Resource owner set successfully'})
+    except Exception as e:
+        logger.error(f"Error setting resource owner: {str(e)}")
+        return jsonify({'error': 'Failed to set resource owner'}), 500
+
+@api.route('/api/admin/permissions/clear', methods=['POST'])
+@requires_auth
+@requires_permission(Permission.ADMIN)
+def clear_all_permissions():
+    """Clear all permissions in the system."""
+    try:
+        permission_store.clear_permissions()
+        return jsonify({'message': 'All permissions cleared successfully'})
+    except Exception as e:
+        logger.error(f"Error clearing permissions: {str(e)}")
+        return jsonify({'error': 'Failed to clear permissions'}), 500
 
 # Register subscription routes with the main api blueprint
 api.register_blueprint(subscription_routes, url_prefix='/subscriptions') 
