@@ -1,0 +1,3527 @@
+{
+  "textbooks": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "author",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "subject",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "file_path",
+        "type": "VARCHAR(500)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "uploaded_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_public",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "tags",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "difficulty_level",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "language",
+        "type": "VARCHAR(10)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "total_cards",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "avg_rating",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "num_ratings",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "textbooks_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": []
+  },
+  "deck_shares": {
+    "columns": [
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "shared_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "deck_id",
+        "user_id"
+      ],
+      "name": "deck_shares_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "deck_shares_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "study_sessions": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "started_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "ended_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "cards_studied",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "correct_answers",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "study_sessions_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "study_sessions_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "decks": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "decks_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "decks_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "textbook_reviews": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "textbook_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "rating",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "comment",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "textbook_reviews_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "textbook_reviews_textbook_id_fkey",
+        "constrained_columns": [
+          "textbook_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "textbooks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "admin_roles": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "admin_roles_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": [
+      {
+        "name": "admin_roles_name_key",
+        "unique": true,
+        "column_names": [
+          "name"
+        ],
+        "duplicates_constraint": "admin_roles_name_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_admin_roles_name",
+        "unique": false,
+        "column_names": [
+          "name"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "user_card_states": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "card_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "easiness",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "interval",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "repetitions",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "next_review",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "last_review",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "user_card_states_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "user_card_states_card_id_fkey",
+        "constrained_columns": [
+          "card_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "cards",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "card_reviews": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "session_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "card_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "quality",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "reviewed_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "time_taken",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "prev_easiness",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "prev_interval",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "prev_repetitions",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "new_easiness",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "new_interval",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "new_repetitions",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "card_reviews_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "card_reviews_card_id_fkey",
+        "constrained_columns": [
+          "card_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "cards",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "card_reviews_session_id_fkey",
+        "constrained_columns": [
+          "session_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "study_sessions",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "admin_role_permissions": {
+    "columns": [
+      {
+        "name": "role_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "permission_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "role_id",
+        "permission_id"
+      ],
+      "name": "admin_role_permissions_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "admin_role_permissions_permission_id_fkey",
+        "constrained_columns": [
+          "permission_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "admin_permissions",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "admin_role_permissions_role_id_fkey",
+        "constrained_columns": [
+          "role_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "admin_roles",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "admin_permissions": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "admin_permissions_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": [
+      {
+        "name": "admin_permissions_name_key",
+        "unique": true,
+        "column_names": [
+          "name"
+        ],
+        "duplicates_constraint": "admin_permissions_name_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_admin_permissions_name",
+        "unique": false,
+        "column_names": [
+          "name"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "user_admin_roles": {
+    "columns": [
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "role_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "assigned_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "user_id",
+        "role_id"
+      ],
+      "name": "user_admin_roles_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "user_admin_roles_assigned_by_fkey",
+        "constrained_columns": [
+          "assigned_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "user_admin_roles_role_id_fkey",
+        "constrained_columns": [
+          "role_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "admin_roles",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "user_admin_roles_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_user_admin_roles_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "admin_audit_logs": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "admin_id",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "action",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "resource_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "resource_id",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "details",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "ip_address",
+        "type": "VARCHAR(45)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "admin_audit_logs_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "admin_audit_logs_admin_id_fkey",
+        "constrained_columns": [
+          "admin_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_admin_audit_logs_admin_id",
+        "unique": false,
+        "column_names": [
+          "admin_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_admin_audit_logs_created_at",
+        "unique": false,
+        "column_names": [
+          "created_at"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "users": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "email",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "username",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "auth0_id",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "last_login",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "email_verified",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "preferred_study_time",
+        "type": "VARCHAR(50)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "notification_preferences",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "study_goals",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "stripe_customer_id",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "picture",
+        "type": "VARCHAR(255)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "users_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": [
+      {
+        "name": "idx_users_auth0_id",
+        "unique": false,
+        "column_names": [
+          "auth0_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_users_email",
+        "unique": false,
+        "column_names": [
+          "email"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_users_username",
+        "unique": false,
+        "column_names": [
+          "username"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "users_auth0_id_key",
+        "unique": true,
+        "column_names": [
+          "auth0_id"
+        ],
+        "duplicates_constraint": "users_auth0_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "users_email_key",
+        "unique": true,
+        "column_names": [
+          "email"
+        ],
+        "duplicates_constraint": "users_email_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "users_stripe_customer_id_key",
+        "unique": true,
+        "column_names": [
+          "stripe_customer_id"
+        ],
+        "duplicates_constraint": "users_stripe_customer_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "users_username_key",
+        "unique": true,
+        "column_names": [
+          "username"
+        ],
+        "duplicates_constraint": "users_username_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "media_files": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "file_name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "file_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "file_size",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "mime_type",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "storage_path",
+        "type": "VARCHAR(500)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "thumbnail_path",
+        "type": "VARCHAR(500)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "media_files_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "media_files_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_media_files_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "media_associations": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "media_file_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "associated_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "associated_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "position",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "context",
+        "type": "VARCHAR(50)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "media_associations_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "media_associations_media_file_id_fkey",
+        "constrained_columns": [
+          "media_file_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "media_files",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_media_associations_type_id",
+        "unique": false,
+        "column_names": [
+          "associated_type",
+          "associated_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "user_decks": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "total_cards",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "active_cards",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "user_decks_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "user_decks_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "parts": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "order_index",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "parts_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "parts_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "parts_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "course_materials": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "material_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "file_path",
+        "type": "VARCHAR(500)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "file_size",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "mime_type",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "tags",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'[]'::jsonb"
+      },
+      {
+        "name": "metadata",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'{}'::jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "course_materials_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "course_materials_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_course_materials_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "study_resources": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "content",
+        "type": "JSONB",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "resource_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "source_material_id",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "tags",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'[]'::jsonb"
+      },
+      {
+        "name": "metadata",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'{}'::jsonb"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "study_resources_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "study_resources_source_material_id_fkey",
+        "constrained_columns": [
+          "source_material_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "course_materials",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "study_resources_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_study_resources_source_material",
+        "unique": false,
+        "column_names": [
+          "source_material_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_study_resources_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "chapters": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "part_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "order_index",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "chapters_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "chapters_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "chapters_part_id_fkey",
+        "constrained_columns": [
+          "part_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "parts",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "resource_generations": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "(uuid_generate_v4())::text"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "resource_id",
+        "type": "VARCHAR(36)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR(20)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "generation_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "prompt",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "result",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "error",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "resource_generations_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "resource_generations_resource_id_fkey",
+        "constrained_columns": [
+          "resource_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "study_resources",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "resource_generations_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_resource_generations_resource_id",
+        "unique": false,
+        "column_names": [
+          "resource_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_resource_generations_status",
+        "unique": false,
+        "column_names": [
+          "status"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "topics": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "chapter_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "order_index",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "topics_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "topics_chapter_id_fkey",
+        "constrained_columns": [
+          "chapter_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "chapters",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "topics_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "cards": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "topic_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "front",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "back",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "media_urls",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'[]'::jsonb"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "cards_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "cards_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "cards_topic_id_fkey",
+        "constrained_columns": [
+          "topic_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "topics",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "live_deck_parts": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "live_deck_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "part_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "live_deck_parts_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "live_deck_parts_live_deck_id_fkey",
+        "constrained_columns": [
+          "live_deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_parts_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "live_deck_parts_part_id_fkey",
+        "constrained_columns": [
+          "part_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "parts",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_live_deck_parts_live_deck_id",
+        "unique": false,
+        "column_names": [
+          "live_deck_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_live_deck_parts_part_id",
+        "unique": false,
+        "column_names": [
+          "part_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "live_deck_parts_live_deck_id_part_id_key",
+        "unique": true,
+        "column_names": [
+          "live_deck_id",
+          "part_id"
+        ],
+        "duplicates_constraint": "live_deck_parts_live_deck_id_part_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "live_deck_chapters": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "live_deck_part_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "chapter_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "live_deck_chapters_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "live_deck_chapters_chapter_id_fkey",
+        "constrained_columns": [
+          "chapter_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "chapters",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_chapters_live_deck_part_id_fkey",
+        "constrained_columns": [
+          "live_deck_part_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_deck_parts",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_chapters_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_live_deck_chapters_chapter_id",
+        "unique": false,
+        "column_names": [
+          "chapter_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_live_deck_chapters_live_deck_part_id",
+        "unique": false,
+        "column_names": [
+          "live_deck_part_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "live_deck_chapters_live_deck_part_id_chapter_id_key",
+        "unique": true,
+        "column_names": [
+          "live_deck_part_id",
+          "chapter_id"
+        ],
+        "duplicates_constraint": "live_deck_chapters_live_deck_part_id_chapter_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "live_decks": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "name",
+        "type": "VARCHAR(255)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "active_cards",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "live_decks_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "live_decks_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "live_deck_topics": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "live_deck_chapter_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "topic_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "live_deck_topics_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "live_deck_topics_live_deck_chapter_id_fkey",
+        "constrained_columns": [
+          "live_deck_chapter_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_deck_chapters",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_topics_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      },
+      {
+        "name": "live_deck_topics_topic_id_fkey",
+        "constrained_columns": [
+          "topic_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "topics",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_live_deck_topics_live_deck_chapter_id",
+        "unique": false,
+        "column_names": [
+          "live_deck_chapter_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_live_deck_topics_topic_id",
+        "unique": false,
+        "column_names": [
+          "topic_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "live_deck_topics_live_deck_chapter_id_topic_id_key",
+        "unique": true,
+        "column_names": [
+          "live_deck_chapter_id",
+          "topic_id"
+        ],
+        "duplicates_constraint": "live_deck_topics_live_deck_chapter_id_topic_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "live_deck_cards": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "live_deck_topic_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "card_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "true"
+      },
+      {
+        "name": "last_modified",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "modified_by",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "CURRENT_TIMESTAMP"
+      },
+      {
+        "name": "media_urls",
+        "type": "JSONB",
+        "nullable": true,
+        "default": "'[]'::jsonb"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "live_deck_cards_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "live_deck_cards_card_id_fkey",
+        "constrained_columns": [
+          "card_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "cards",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_cards_live_deck_topic_id_fkey",
+        "constrained_columns": [
+          "live_deck_topic_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_deck_topics",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      },
+      {
+        "name": "live_deck_cards_modified_by_fkey",
+        "constrained_columns": [
+          "modified_by"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_live_deck_cards_card_id",
+        "unique": false,
+        "column_names": [
+          "card_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_live_deck_cards_live_deck_topic_id",
+        "unique": false,
+        "column_names": [
+          "live_deck_topic_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "live_deck_cards_live_deck_topic_id_card_id_key",
+        "unique": true,
+        "column_names": [
+          "live_deck_topic_id",
+          "card_id"
+        ],
+        "duplicates_constraint": "live_deck_cards_live_deck_topic_id_card_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "learning_analytics": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "live_deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "preferred_study_time",
+        "type": "VARCHAR(5)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "average_session_duration",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "cards_per_session",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "mastery_level",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "weak_areas",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "strong_areas",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "preferred_card_types",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "study_consistency",
+        "type": "DOUBLE PRECISION",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "learning_analytics_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "learning_analytics_live_deck_id_fkey",
+        "constrained_columns": [
+          "live_deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "deck_collaborations": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "role",
+        "type": "VARCHAR(20)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "can_edit",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "can_share",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "can_delete",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "deck_collaborations_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "deck_collaborations_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "achievements": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "title",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "earned_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "achievement_data",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "achievements_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": []
+  },
+  "study_reminders": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "live_deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "reminder_time",
+        "type": "TIME",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "days_of_week",
+        "type": "JSON",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "notification_type",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "is_active",
+        "type": "BOOLEAN",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "study_reminders_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "study_reminders_live_deck_id_fkey",
+        "constrained_columns": [
+          "live_deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "live_decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "deck_exports": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "deck_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "format",
+        "type": "VARCHAR(20)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "settings",
+        "type": "JSON",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "file_url",
+        "type": "VARCHAR(500)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "completed_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "deck_exports_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "deck_exports_deck_id_fkey",
+        "constrained_columns": [
+          "deck_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "decks",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {},
+        "comment": null
+      }
+    ],
+    "indexes": []
+  },
+  "content_reports": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "reporter_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "content_type",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "content_id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "reason",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "description",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "resolved_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "content_reports_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": []
+  },
+  "api_logs": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "user_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "endpoint",
+        "type": "VARCHAR(100)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "method",
+        "type": "VARCHAR(10)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "status_code",
+        "type": "INTEGER",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "response_time",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "api_logs_pkey",
+      "comment": null
+    },
+    "foreign_keys": [],
+    "indexes": []
+  },
+  "subscriptions": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "tier",
+        "type": "VARCHAR(20)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "status",
+        "type": "VARCHAR(20)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "current_period_start",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "current_period_end",
+        "type": "TIMESTAMP",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "stripe_customer_id",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "stripe_subscription_id",
+        "type": "TEXT",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "canceled_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "timezone('utc'::text, now())"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "timezone('utc'::text, now())"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "subscriptions_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "subscriptions_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_subscriptions_status",
+        "unique": false,
+        "column_names": [
+          "status"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "idx_subscriptions_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "subscriptions_stripe_subscription_id_key",
+        "unique": true,
+        "column_names": [
+          "stripe_subscription_id"
+        ],
+        "duplicates_constraint": "subscriptions_stripe_subscription_id_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "subscription_history": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "subscription_id",
+        "type": "UUID",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "previous_tier",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "new_tier",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "previous_status",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "new_status",
+        "type": "VARCHAR(20)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "change_reason",
+        "type": "TEXT",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "timezone('utc'::text, now())"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "subscription_history_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "subscription_history_subscription_id_fkey",
+        "constrained_columns": [
+          "subscription_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "subscriptions",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_subscription_history_subscription_id",
+        "unique": false,
+        "column_names": [
+          "subscription_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  },
+  "subscription_usage": {
+    "columns": [
+      {
+        "name": "id",
+        "type": "UUID",
+        "nullable": false,
+        "default": "uuid_generate_v4()"
+      },
+      {
+        "name": "user_id",
+        "type": "VARCHAR(36)",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "feature",
+        "type": "VARCHAR(50)",
+        "nullable": false,
+        "default": "None"
+      },
+      {
+        "name": "usage_count",
+        "type": "INTEGER",
+        "nullable": true,
+        "default": "0"
+      },
+      {
+        "name": "last_used_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "None"
+      },
+      {
+        "name": "created_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "timezone('utc'::text, now())"
+      },
+      {
+        "name": "updated_at",
+        "type": "TIMESTAMP",
+        "nullable": true,
+        "default": "timezone('utc'::text, now())"
+      }
+    ],
+    "primary_key": {
+      "constrained_columns": [
+        "id"
+      ],
+      "name": "subscription_usage_pkey",
+      "comment": null
+    },
+    "foreign_keys": [
+      {
+        "name": "subscription_usage_user_id_fkey",
+        "constrained_columns": [
+          "user_id"
+        ],
+        "referred_schema": null,
+        "referred_table": "users",
+        "referred_columns": [
+          "id"
+        ],
+        "options": {
+          "ondelete": "CASCADE"
+        },
+        "comment": null
+      }
+    ],
+    "indexes": [
+      {
+        "name": "idx_subscription_usage_user_id",
+        "unique": false,
+        "column_names": [
+          "user_id"
+        ],
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      },
+      {
+        "name": "subscription_usage_user_id_feature_key",
+        "unique": true,
+        "column_names": [
+          "user_id",
+          "feature"
+        ],
+        "duplicates_constraint": "subscription_usage_user_id_feature_key",
+        "include_columns": [],
+        "dialect_options": {
+          "postgresql_include": []
+        }
+      }
+    ]
+  }
+}

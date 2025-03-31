@@ -2,6 +2,29 @@ from datetime import datetime
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 
+class Decks:
+    """
+    Model class for decks table.
+    """
+
+    def __init__(self, id=None, user_id=None, title=None, created_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.user_id = user_id
+        self.title = title
+        self.created_at = created_at
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'title': self.title,
+            'created_at': self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
 class Textbooks:
     """
     Model class for textbooks table.
@@ -68,6 +91,29 @@ class DeckShares:
     def from_dict(cls, data):
         return cls(**data)
 
+class Parts:
+    """
+    Model class for parts table.
+    """
+
+    def __init__(self, id=None, deck_id=None, title=None, order_index=None):
+        self.id = id or str(uuid.uuid4())
+        self.deck_id = deck_id
+        self.title = title
+        self.order_index = order_index
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'deck_id': self.deck_id,
+            'title': self.title,
+            'order_index': self.order_index,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
 class StudySessions:
     """
     Model class for study_sessions table.
@@ -97,35 +143,6 @@ class StudySessions:
     def from_dict(cls, data):
         return cls(**data)
 
-class Decks:
-    """
-    Model class for decks table.
-    """
-
-    def __init__(self, id=None, user_id=None, title=None, created_at=None, is_active=None, last_modified=None, modified_by=None):
-        self.id = id or str(uuid.uuid4())
-        self.user_id = user_id
-        self.title = title
-        self.created_at = created_at
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'user_id': self.user_id,
-            'title': self.title,
-            'created_at': self.created_at,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
 class TextbookReviews:
     """
     Model class for textbook_reviews table.
@@ -147,6 +164,52 @@ class TextbookReviews:
             'rating': self.rating,
             'comment': self.comment,
             'created_at': self.created_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class Chapters:
+    """
+    Model class for chapters table.
+    """
+
+    def __init__(self, id=None, part_id=None, title=None, order_index=None):
+        self.id = id or str(uuid.uuid4())
+        self.part_id = part_id
+        self.title = title
+        self.order_index = order_index
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'part_id': self.part_id,
+            'title': self.title,
+            'order_index': self.order_index,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class Topics:
+    """
+    Model class for topics table.
+    """
+
+    def __init__(self, id=None, chapter_id=None, title=None, order_index=None):
+        self.id = id or str(uuid.uuid4())
+        self.chapter_id = chapter_id
+        self.title = title
+        self.order_index = order_index
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'chapter_id': self.chapter_id,
+            'title': self.title,
+            'order_index': self.order_index,
         }
 
     @classmethod
@@ -248,6 +311,33 @@ class CardReviews:
             'new_easiness': self.new_easiness,
             'new_interval': self.new_interval,
             'new_repetitions': self.new_repetitions,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class Cards:
+    """
+    Model class for cards table.
+    """
+
+    def __init__(self, id=None, topic_id=None, front=None, back=None, created_at=None, media_urls=None):
+        self.id = id or str(uuid.uuid4())
+        self.topic_id = topic_id
+        self.front = front
+        self.back = back
+        self.created_at = created_at
+        self.media_urls = media_urls
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'topic_id': self.topic_id,
+            'front': self.front,
+            'back': self.back,
+            'created_at': self.created_at,
+            'media_urls': self.media_urls,
         }
 
     @classmethod
@@ -494,35 +584,6 @@ class UserDecks:
     def from_dict(cls, data):
         return cls(**data)
 
-class Parts:
-    """
-    Model class for parts table.
-    """
-
-    def __init__(self, id=None, deck_id=None, title=None, order_index=None, is_active=None, last_modified=None, modified_by=None):
-        self.id = id or str(uuid.uuid4())
-        self.deck_id = deck_id
-        self.title = title
-        self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'deck_id': self.deck_id,
-            'title': self.title,
-            'order_index': self.order_index,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
 class CourseMaterials:
     """
     Model class for course_materials table.
@@ -597,35 +658,6 @@ class StudyResources:
     def from_dict(cls, data):
         return cls(**data)
 
-class Chapters:
-    """
-    Model class for chapters table.
-    """
-
-    def __init__(self, id=None, part_id=None, title=None, order_index=None, is_active=None, last_modified=None, modified_by=None):
-        self.id = id or str(uuid.uuid4())
-        self.part_id = part_id
-        self.title = title
-        self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'part_id': self.part_id,
-            'title': self.title,
-            'order_index': self.order_index,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
 class ResourceGenerations:
     """
     Model class for resource_generations table.
@@ -661,126 +693,6 @@ class ResourceGenerations:
     def from_dict(cls, data):
         return cls(**data)
 
-class Topics:
-    """
-    Model class for topics table.
-    """
-
-    def __init__(self, id=None, chapter_id=None, title=None, order_index=None, is_active=None, last_modified=None, modified_by=None):
-        self.id = id or str(uuid.uuid4())
-        self.chapter_id = chapter_id
-        self.title = title
-        self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'chapter_id': self.chapter_id,
-            'title': self.title,
-            'order_index': self.order_index,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-class Cards:
-    """
-    Model class for cards table.
-    """
-
-    def __init__(self, id=None, topic_id=None, front=None, back=None, created_at=None, media_urls=None, is_active=None, last_modified=None, modified_by=None):
-        self.id = id or str(uuid.uuid4())
-        self.topic_id = topic_id
-        self.front = front
-        self.back = back
-        self.created_at = created_at
-        self.media_urls = media_urls
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'topic_id': self.topic_id,
-            'front': self.front,
-            'back': self.back,
-            'created_at': self.created_at,
-            'media_urls': self.media_urls,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-class LiveDeckParts:
-    """
-    Model class for live_deck_parts table.
-    """
-
-    def __init__(self, id=None, live_deck_id=None, part_id=None, is_active=None, last_modified=None, modified_by=None, created_at=None):
-        self.id = id or str(uuid.uuid4())
-        self.live_deck_id = live_deck_id
-        self.part_id = part_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'live_deck_id': self.live_deck_id,
-            'part_id': self.part_id,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-            'created_at': self.created_at,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-class LiveDeckChapters:
-    """
-    Model class for live_deck_chapters table.
-    """
-
-    def __init__(self, id=None, live_deck_part_id=None, chapter_id=None, is_active=None, last_modified=None, modified_by=None, created_at=None):
-        self.id = id or str(uuid.uuid4())
-        self.live_deck_part_id = live_deck_part_id
-        self.chapter_id = chapter_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'live_deck_part_id': self.live_deck_part_id,
-            'chapter_id': self.chapter_id,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-            'created_at': self.created_at,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
 class LiveDecks:
     """
     Model class for live_decks table.
@@ -806,66 +718,6 @@ class LiveDecks:
             'created_at': self.created_at,
             'updated_at': self.updated_at,
             'active_cards': self.active_cards,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-class LiveDeckTopics:
-    """
-    Model class for live_deck_topics table.
-    """
-
-    def __init__(self, id=None, live_deck_chapter_id=None, topic_id=None, is_active=None, last_modified=None, modified_by=None, created_at=None):
-        self.id = id or str(uuid.uuid4())
-        self.live_deck_chapter_id = live_deck_chapter_id
-        self.topic_id = topic_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'live_deck_chapter_id': self.live_deck_chapter_id,
-            'topic_id': self.topic_id,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-            'created_at': self.created_at,
-        }
-
-    @classmethod
-    def from_dict(cls, data):
-        return cls(**data)
-
-class LiveDeckCards:
-    """
-    Model class for live_deck_cards table.
-    """
-
-    def __init__(self, id=None, live_deck_topic_id=None, card_id=None, is_active=None, last_modified=None, modified_by=None, created_at=None, media_urls=None):
-        self.id = id or str(uuid.uuid4())
-        self.live_deck_topic_id = live_deck_topic_id
-        self.card_id = card_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
-        self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
-        self.media_urls = media_urls or []
-
-    def to_dict(self):
-        return {
-            'id': self.id,
-            'live_deck_topic_id': self.live_deck_topic_id,
-            'card_id': self.card_id,
-            'is_active': self.is_active,
-            'last_modified': self.last_modified,
-            'modified_by': self.modified_by,
-            'created_at': self.created_at,
-            'media_urls': self.media_urls,
         }
 
     @classmethod

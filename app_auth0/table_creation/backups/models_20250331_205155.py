@@ -107,8 +107,8 @@ class Decks:
         self.user_id = user_id
         self.title = title
         self.created_at = created_at
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
 
     def to_dict(self):
@@ -504,8 +504,8 @@ class Parts:
         self.deck_id = deck_id
         self.title = title
         self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
 
     def to_dict(self):
@@ -607,8 +607,8 @@ class Chapters:
         self.part_id = part_id
         self.title = title
         self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
 
     def to_dict(self):
@@ -671,8 +671,8 @@ class Topics:
         self.chapter_id = chapter_id
         self.title = title
         self.order_index = order_index
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
 
     def to_dict(self):
@@ -702,8 +702,8 @@ class Cards:
         self.back = back
         self.created_at = created_at
         self.media_urls = media_urls
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
 
     def to_dict(self):
@@ -732,10 +732,10 @@ class LiveDeckParts:
         self.id = id or str(uuid.uuid4())
         self.live_deck_id = live_deck_id
         self.part_id = part_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
+        self.created_at = created_at
 
     def to_dict(self):
         return {
@@ -761,10 +761,10 @@ class LiveDeckChapters:
         self.id = id or str(uuid.uuid4())
         self.live_deck_part_id = live_deck_part_id
         self.chapter_id = chapter_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
+        self.created_at = created_at
 
     def to_dict(self):
         return {
@@ -821,10 +821,10 @@ class LiveDeckTopics:
         self.id = id or str(uuid.uuid4())
         self.live_deck_chapter_id = live_deck_chapter_id
         self.topic_id = topic_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
+        self.created_at = created_at
 
     def to_dict(self):
         return {
@@ -850,11 +850,11 @@ class LiveDeckCards:
         self.id = id or str(uuid.uuid4())
         self.live_deck_topic_id = live_deck_topic_id
         self.card_id = card_id
-        self.is_active = is_active if is_active is not None else True
-        self.last_modified = last_modified or datetime.utcnow()
+        self.is_active = is_active
+        self.last_modified = last_modified
         self.modified_by = modified_by
-        self.created_at = created_at or datetime.utcnow()
-        self.media_urls = media_urls or []
+        self.created_at = created_at
+        self.media_urls = media_urls
 
     def to_dict(self):
         return {

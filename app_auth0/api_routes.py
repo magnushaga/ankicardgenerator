@@ -680,11 +680,14 @@ def analyze_textbook():
         return jsonify({"error": str(e), "fallback_analysis": default_analysis}), 500
 
 @api.route('/api/generate-textbook-structure', methods=['POST'])
+@requires_auth
 def generate_textbook_structure():
     """Generate a structured outline for a textbook"""
     data = request.get_json()
     textbook_name = data.get('textbook_name')
     test_mode = data.get('test_mode', False)
+    is_public = data.get('is_public', False)
+    allow_collaboration = data.get('allow_collaboration', False)
     
     if not textbook_name:
         return jsonify({'error': 'textbook_name is required'}), 400
@@ -693,18 +696,62 @@ def generate_textbook_structure():
     try:
         structure = analyzer.generate_structure(textbook_name, test_mode)
         
+        # Get user ID from request
+        user_id = request.user.get('sub')
+        if not user_id:
+            return jsonify({'error': 'User ID not found'}), 401
+            
         # Create database entries in Supabase
         textbook_data = {
             'id': str(uuid.uuid4()),
             'title': textbook_name,
             'author': 'Generated',
             'subject': 'general',
-            'created_at': datetime.utcnow().isoformat()
+            'created_at': datetime.utcnow().isoformat(),
+            'created_by': user_id,
+            'is_public': is_public,
+            'allow_collaboration': allow_collaboration
         }
         
         result = supabase.table('textbooks').insert(textbook_data).execute()
         textbook_id = result.data[0]['id']
         
+        # Create user ownership record
+        user_deck_data = {
+            'id': str(uuid.uuid4()),
+            'user_id': user_id,
+            'textbook_id': textbook_id,
+            'is_owner': True,
+            'can_edit': True,
+            'can_share': True,
+            'created_at': datetime.utcnow().isoformat()
+        }
+        supabase.table('user_decks').insert(user_deck_data).execute()
+        
+        # Create initial sharing settings if public
+        if is_public:
+            share_data = {
+                'id': str(uuid.uuid4()),
+                'textbook_id': textbook_id,
+                'shared_by': user_id,
+                'share_type': 'public',
+                'created_at': datetime.utcnow().isoformat()
+            }
+            supabase.table('deck_shares').insert(share_data).execute()
+        
+        # Create initial collaboration settings if enabled
+        if allow_collaboration:
+            collaboration_data = {
+                'id': str(uuid.uuid4()),
+                'textbook_id': textbook_id,
+                'created_by': user_id,
+                'is_active': True,
+                'max_collaborators': 5,  # Default max collaborators
+                'created_at': datetime.utcnow().isoformat()
+            }
+            supabase.table('deck_collaborations').insert(collaboration_data).execute()
+        
+        # Create textbook structure
         for part_idx, part_data in enumerate(structure["parts"]):
             part_data = {
                 'id': str(uuid.uuid4()),
@@ -738,7 +785,18 @@ def generate_textbook_structure():
                     }
                     supabase.table('topics').insert(topic_data).execute()
         
-        return jsonify(structure)
+        # Return enhanced response with ownership and sharing info
+        return jsonify({
+            'structure': structure,
+            'textbook': {
+                'id': textbook_id,
+                'title': textbook_name,
+                'is_public': is_public,
+                'allow_collaboration': allow_collaboration,
+                'created_by': user_id,
+                'created_at': textbook_data['created_at']
+            }
+        })
         
     except Exception as e:
         logger.error(f"Error generating textbook structure: {e}")

@@ -19,7 +19,12 @@ import {
   TextField,
   IconButton,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Grid,
+  Card,
+  CardContent,
+  Tooltip,
+  Chip,
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
@@ -27,6 +32,16 @@ import AddIcon from '@mui/icons-material/Add';
 import PersonIcon from '@mui/icons-material/Person';
 import SecurityIcon from '@mui/icons-material/Security';
 import HistoryIcon from '@mui/icons-material/History';
+import {
+  People as PeopleIcon,
+  MenuBook as MenuBookIcon,
+  Analytics as AnalyticsIcon,
+  Report as ReportIcon,
+  Visibility as VisibilityIcon,
+  Block as BlockIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+} from '@mui/icons-material';
 
 function TabPanel(props) {
   const { children, value, index, ...other } = props;
@@ -47,180 +62,182 @@ function TabPanel(props) {
   );
 }
 
-function AdminDashboard() {
+const AdminDashboard = () => {
   const [tabValue, setTabValue] = useState(0);
-  const [users, setUsers] = useState([]);
-  const [roles, setRoles] = useState([]);
-  const [permissions, setPermissions] = useState([]);
-  const [auditLogs, setAuditLogs] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [dialogType, setDialogType] = useState('');
-  const [selectedItem, setSelectedItem] = useState(null);
-  const [formData, setFormData] = useState({});
+  const [users, setUsers] = useState([]);
+  const [decks, setDecks] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
+  const [reports, setReports] = useState([]);
+  const [selectedUser, setSelectedUser] = useState(null);
+  const [selectedDeck, setSelectedDeck] = useState(null);
+  const [selectedReport, setSelectedReport] = useState(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogType, setDialogType] = useState(null);
 
-  useEffect(() => {
-    fetchAdminData();
-  }, []);
-
-  const fetchAdminData = async () => {
+  const fetchData = async (endpoint, options = {}) => {
     try {
-      setLoading(true);
       const token = localStorage.getItem('access_token');
-      if (!token) throw new Error('No access token found');
-
-      // Fetch users
-      const usersResponse = await fetch('http://localhost:5001/api/admin/users', {
-        headers: { 'Authorization': `Bearer ${token}` }
+      const response = await fetch(`http://localhost:5001/api/admin/${endpoint}`, {
+        ...options,
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+          ...options.headers,
+        },
       });
-      if (!usersResponse.ok) throw new Error('Failed to fetch users');
-      const usersData = await usersResponse.json();
-      setUsers(usersData.users);
 
-      // Fetch roles
-      const rolesResponse = await fetch('http://localhost:5001/api/admin/roles', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!rolesResponse.ok) throw new Error('Failed to fetch roles');
-      const rolesData = await rolesResponse.json();
-      setRoles(rolesData);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to fetch data');
+      }
 
-      // Fetch permissions
-      const permissionsResponse = await fetch('http://localhost:5001/api/admin/permissions', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!permissionsResponse.ok) throw new Error('Failed to fetch permissions');
-      const permissionsData = await permissionsResponse.json();
-      setPermissions(permissionsData);
-
-      // Fetch audit logs
-      const logsResponse = await fetch('http://localhost:5001/api/admin/audit-logs', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (!logsResponse.ok) throw new Error('Failed to fetch audit logs');
-      const logsData = await logsResponse.json();
-      setAuditLogs(logsData.logs);
-
+      return await response.json();
     } catch (err) {
+      console.error(`Error fetching ${endpoint}:`, err);
       setError(err.message);
-      console.error('Error fetching admin data:', err);
-    } finally {
-      setLoading(false);
+      return null;
     }
   };
+
+  const loadUsers = async () => {
+    setLoading(true);
+    const data = await fetchData('users');
+    if (data) {
+      setUsers(data.users);
+    }
+    setLoading(false);
+  };
+
+  const loadDecks = async () => {
+    setLoading(true);
+    const data = await fetchData('decks');
+    if (data) {
+      setDecks(data.decks);
+    }
+    setLoading(false);
+  };
+
+  const loadAnalytics = async () => {
+    setLoading(true);
+    const [systemData, activityData] = await Promise.all([
+      fetchData('analytics/system'),
+      fetchData('analytics/activity'),
+    ]);
+    if (systemData && activityData) {
+      setAnalytics({ system: systemData, activity: activityData });
+    }
+    setLoading(false);
+  };
+
+  const loadReports = async () => {
+    setLoading(true);
+    const data = await fetchData('content/reports');
+    if (data) {
+      setReports(data.reports);
+    }
+    setLoading(false);
+  };
+
+  useEffect(() => {
+    switch (tabValue) {
+      case 0:
+        loadUsers();
+        break;
+      case 1:
+        loadDecks();
+        break;
+      case 2:
+        loadAnalytics();
+        break;
+      case 3:
+        loadReports();
+        break;
+      default:
+        break;
+    }
+  }, [tabValue]);
 
   const handleTabChange = (event, newValue) => {
     setTabValue(newValue);
   };
 
-  const handleOpenDialog = (type, item = null) => {
-    setDialogType(type);
-    setSelectedItem(item);
-    setFormData(item || {});
-    setOpenDialog(true);
-  };
-
-  const handleCloseDialog = () => {
-    setOpenDialog(false);
-    setSelectedItem(null);
-    setFormData({});
-  };
-
-  const handleFormChange = (e) => {
-    setFormData({
-      ...formData,
-      [e.target.name]: e.target.value
-    });
-  };
-
-  const handleSubmit = async () => {
+  const handleUserStatusChange = async (userId, isActive) => {
     try {
       const token = localStorage.getItem('access_token');
-      let response;
+      const response = await fetch(`http://localhost:5001/api/admin/users/${userId}/status`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_active: isActive }),
+      });
 
-      switch (dialogType) {
-        case 'editUser':
-          response = await fetch(`http://localhost:5001/api/admin/users/${selectedItem.id}`, {
-            method: 'PUT',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
-          });
-          break;
-        case 'createRole':
-          response = await fetch('http://localhost:5001/api/admin/roles', {
-            method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(formData)
-          });
-          break;
-        // Add more cases for other operations
+      if (!response.ok) {
+        throw new Error('Failed to update user status');
       }
 
-      if (!response.ok) throw new Error('Operation failed');
-      
-      handleCloseDialog();
-      fetchAdminData(); // Refresh data
+      loadUsers();
     } catch (err) {
+      console.error('Error updating user status:', err);
       setError(err.message);
-      console.error('Error performing operation:', err);
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
+  const handleDeckVisibilityChange = async (deckId, isPublic) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`http://localhost:5001/api/admin/decks/${deckId}/visibility`, {
+            method: 'PUT',
+            headers: {
+              'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ is_public: isPublic }),
+      });
 
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error}</Alert>
-      </Box>
-    );
-  }
+      if (!response.ok) {
+        throw new Error('Failed to update deck visibility');
+      }
 
-    return (
-      <Box sx={{ p: 3 }}>
-      <Typography variant="h4" gutterBottom>
-        Admin Dashboard
-      </Typography>
+      loadDecks();
+    } catch (err) {
+      console.error('Error updating deck visibility:', err);
+      setError(err.message);
+    }
+  };
 
-      <Paper sx={{ width: '100%' }}>
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
-        >
-          <Tab icon={<PersonIcon />} label="Users" />
-          <Tab icon={<SecurityIcon />} label="Roles" />
-          <Tab icon={<HistoryIcon />} label="Audit Logs" />
-        </Tabs>
+  const handleReportResolution = async (reportId, status) => {
+    try {
+      const token = localStorage.getItem('access_token');
+      const response = await fetch(`http://localhost:5001/api/admin/content/reports/${reportId}/resolve`, {
+        method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+            },
+        body: JSON.stringify({ status }),
+          });
 
-        <TabPanel value={tabValue} index={0}>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('createUser')}
-            >
-              Add User
-            </Button>
-          </Box>
-          <TableContainer>
+      if (!response.ok) {
+        throw new Error('Failed to resolve report');
+      }
+
+      loadReports();
+      } catch (err) {
+      console.error('Error resolving report:', err);
+        setError(err.message);
+    }
+  };
+
+  const renderUsersTab = () => (
+    <TableContainer component={Paper}>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
+            <TableCell>User</TableCell>
                   <TableCell>Email</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Actions</TableCell>
@@ -229,153 +246,210 @@ function AdminDashboard() {
               <TableBody>
                 {users.map((user) => (
                   <TableRow key={user.id}>
-                    <TableCell>{user.name}</TableCell>
+              <TableCell>{user.username || user.email.split('@')[0]}</TableCell>
                     <TableCell>{user.email}</TableCell>
-                    <TableCell>{user.is_active ? 'Active' : 'Inactive'}</TableCell>
+              <TableCell>
+                <Chip
+                  label={user.is_active ? 'Active' : 'Suspended'}
+                  color={user.is_active ? 'success' : 'error'}
+                />
+              </TableCell>
                     <TableCell>
-                      <IconButton onClick={() => handleOpenDialog('editUser', user)}>
-                        <EditIcon />
+                <Tooltip title={user.is_active ? 'Suspend User' : 'Activate User'}>
+                  <IconButton
+                    onClick={() => handleUserStatusChange(user.id, !user.is_active)}
+                    color={user.is_active ? 'error' : 'success'}
+                  >
+                    {user.is_active ? <BlockIcon /> : <CheckCircleIcon />}
                       </IconButton>
-                      <IconButton color="error">
-                        <DeleteIcon />
-                      </IconButton>
+                </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
-        </TabPanel>
+  );
 
-        <TabPanel value={tabValue} index={1}>
-          <Box sx={{ mb: 2 }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => handleOpenDialog('createRole')}
-            >
-              Add Role
-            </Button>
-          </Box>
-          <TableContainer>
+  const renderDecksTab = () => (
+    <TableContainer component={Paper}>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Name</TableCell>
-                  <TableCell>Description</TableCell>
+            <TableCell>Title</TableCell>
+            <TableCell>Owner</TableCell>
+            <TableCell>Visibility</TableCell>
                   <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {roles.map((role) => (
-                  <TableRow key={role.id}>
-                    <TableCell>{role.name}</TableCell>
-                    <TableCell>{role.description}</TableCell>
+          {decks.map((deck) => (
+            <TableRow key={deck.id}>
+              <TableCell>{deck.title}</TableCell>
+              <TableCell>{deck.user_id}</TableCell>
+              <TableCell>
+                <Chip
+                  label={deck.is_public ? 'Public' : 'Private'}
+                  color={deck.is_public ? 'success' : 'default'}
+                />
+              </TableCell>
                     <TableCell>
-                      <IconButton onClick={() => handleOpenDialog('editRole', role)}>
-                        <EditIcon />
+                <Tooltip title={deck.is_public ? 'Make Private' : 'Make Public'}>
+                  <IconButton
+                    onClick={() => handleDeckVisibilityChange(deck.id, !deck.is_public)}
+                    color={deck.is_public ? 'default' : 'success'}
+                  >
+                    <VisibilityIcon />
                       </IconButton>
-                      <IconButton color="error">
-                        <DeleteIcon />
-                      </IconButton>
+                </Tooltip>
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
-        </TabPanel>
+  );
 
-        <TabPanel value={tabValue} index={2}>
-          <TableContainer>
+  const renderAnalyticsTab = () => (
+    <Grid container spacing={3}>
+      <Grid item xs={12} md={4}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6">System Overview</Typography>
+            {analytics?.system && (
+              <>
+                <Typography>Total Users: {analytics.system.total_users}</Typography>
+                <Typography>Total Decks: {analytics.system.total_decks}</Typography>
+                <Typography>Total Sessions: {analytics.system.total_sessions}</Typography>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid item xs={12} md={4}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6">Activity Metrics</Typography>
+            {analytics?.activity && (
+              <>
+                <Typography>Daily Active Users: {analytics.activity.daily_active_users}</Typography>
+                <Typography>
+                  Avg Session Duration: {Math.round(analytics.activity.average_session_duration / 60)} minutes
+                </Typography>
+              </>
+            )}
+          </CardContent>
+        </Card>
+      </Grid>
+      <Grid item xs={12} md={4}>
+        <Card>
+          <CardContent>
+            <Typography variant="h6">Recent Activity</Typography>
+            {analytics?.system?.recent_users && (
+              <Typography>
+                New Users Today: {analytics.system.recent_users.length}
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
+      </Grid>
+    </Grid>
+  );
+
+  const renderReportsTab = () => (
+    <TableContainer component={Paper}>
             <Table>
               <TableHead>
                 <TableRow>
-                  <TableCell>Admin</TableCell>
-                  <TableCell>Action</TableCell>
-                  <TableCell>Resource</TableCell>
-                  <TableCell>Date</TableCell>
+            <TableCell>Report ID</TableCell>
+            <TableCell>Type</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell>Actions</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
-                {auditLogs.map((log) => (
-                  <TableRow key={log.id}>
-                    <TableCell>{log.admin_id}</TableCell>
-                    <TableCell>{log.action}</TableCell>
-                    <TableCell>{log.resource_type}</TableCell>
-                    <TableCell>{new Date(log.created_at).toLocaleString()}</TableCell>
+          {reports.map((report) => (
+            <TableRow key={report.id}>
+              <TableCell>{report.id}</TableCell>
+              <TableCell>{report.content_type}</TableCell>
+              <TableCell>
+                <Chip
+                  label={report.status}
+                  color={report.status === 'pending' ? 'warning' : 'success'}
+                />
+              </TableCell>
+              <TableCell>
+                {report.status === 'pending' && (
+                  <>
+                    <Tooltip title="Approve">
+                      <IconButton
+                        onClick={() => handleReportResolution(report.id, 'approved')}
+                        color="success"
+                      >
+                        <CheckCircleIcon />
+                      </IconButton>
+                    </Tooltip>
+                    <Tooltip title="Reject">
+                      <IconButton
+                        onClick={() => handleReportResolution(report.id, 'rejected')}
+                        color="error"
+                      >
+                        <CancelIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </>
+                )}
+              </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
           </TableContainer>
-        </TabPanel>
-      </Paper>
+  );
 
-      {/* Dialog for creating/editing items */}
-      <Dialog open={openDialog} onClose={handleCloseDialog}>
-        <DialogTitle>
-          {dialogType === 'createUser' ? 'Create New User' :
-           dialogType === 'editUser' ? 'Edit User' :
-           dialogType === 'createRole' ? 'Create New Role' :
-           dialogType === 'editRole' ? 'Edit Role' : 'Action'}
-        </DialogTitle>
-        <DialogContent>
-          {dialogType.includes('User') && (
-            <>
-              <TextField
-                autoFocus
-                margin="dense"
-                name="name"
-                label="Name"
-                fullWidth
-                value={formData.name || ''}
-                onChange={handleFormChange}
-              />
-              <TextField
-                margin="dense"
-                name="email"
-                label="Email"
-                type="email"
-                fullWidth
-                value={formData.email || ''}
-                onChange={handleFormChange}
-              />
+  return (
+    <Box sx={{ width: '100%', p: 3 }}>
+      <Typography variant="h4" sx={{ mb: 3 }}>
+        Admin Dashboard
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+        <Tabs value={tabValue} onChange={handleTabChange}>
+          <Tab icon={<PeopleIcon />} label="Users" />
+          <Tab icon={<MenuBookIcon />} label="Decks" />
+          <Tab icon={<AnalyticsIcon />} label="Analytics" />
+          <Tab icon={<ReportIcon />} label="Reports" />
+        </Tabs>
+      </Box>
+
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <>
+          <TabPanel value={tabValue} index={0}>
+            {renderUsersTab()}
+          </TabPanel>
+          <TabPanel value={tabValue} index={1}>
+            {renderDecksTab()}
+          </TabPanel>
+          <TabPanel value={tabValue} index={2}>
+            {renderAnalyticsTab()}
+          </TabPanel>
+          <TabPanel value={tabValue} index={3}>
+            {renderReportsTab()}
+          </TabPanel>
             </>
           )}
-          {dialogType.includes('Role') && (
-            <>
-              <TextField
-                autoFocus
-                margin="dense"
-                name="name"
-                label="Role Name"
-                fullWidth
-                value={formData.name || ''}
-                onChange={handleFormChange}
-              />
-              <TextField
-                margin="dense"
-                name="description"
-                label="Description"
-                fullWidth
-                multiline
-                rows={3}
-                value={formData.description || ''}
-                onChange={handleFormChange}
-              />
-            </>
-          )}
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSubmit} variant="contained">
-            {dialogType.startsWith('create') ? 'Create' : 'Save'}
-          </Button>
-        </DialogActions>
-      </Dialog>
       </Box>
     );
-  }
+};
 
 export default AdminDashboard; 
