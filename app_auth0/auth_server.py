@@ -14,7 +14,11 @@ import urllib.parse
 from user_management import create_or_update_user, get_user_by_auth0_id
 from api_routes import api
 from admin_routes import admin
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy import text, create_engine
+from flask_sqlalchemy import SQLAlchemy
+from models import Users
+import threading
 
 # Configure logging first, before any other code
 logging.basicConfig(
@@ -27,6 +31,13 @@ logger = logging.getLogger(__name__)
 load_dotenv()
 
 app = Flask(__name__)
+
+# Initialize SQLAlchemy with proper URL parsing
+password = urllib.parse.quote_plus("H@ukerkul120700")
+DATABASE_URL = f"postgresql://postgres:{password}@db.wxisvjmhokwtjwcqaarb.supabase.co:5432/postgres"
+app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db = SQLAlchemy(app)
 
 # Configure CORS
 CORS(app, 
@@ -55,11 +66,18 @@ app.register_blueprint(api, url_prefix='/api')
 
 # Register the admin routes blueprint
 app.register_blueprint(admin, url_prefix='/api/admin')
+logger.info("Admin routes registered with prefix /api/admin")
 
 # Handle OPTIONS requests
 @app.route('/', methods=['OPTIONS'])
 def handle_options():
     return jsonify({'status': 'ok'})
+
+# Add a test endpoint for admin routes
+@app.route('/api/admin/test', methods=['GET'])
+def test_admin():
+    logger.info("Admin test endpoint called")
+    return jsonify({"message": "Admin routes are working!"})
 
 # Auth0 configuration
 oauth = OAuth(app)
@@ -84,6 +102,25 @@ logger.info(f"Auth0 Domain: {AUTH0_DOMAIN}")
 logger.info(f"Auth0 Client ID: {AUTH0_CLIENT_ID[:6]}...")  # Log only first 6 chars for security
 logger.info(f"Redirect URI: {REDIRECT_URI}")
 
+# Add after other global variables
+user_info_cache = {}
+cache_lock = threading.Lock()
+CACHE_DURATION = timedelta(minutes=5)
+
+def get_cached_user_info(token):
+    """Get user info from cache if available and not expired"""
+    with cache_lock:
+        if token in user_info_cache:
+            cached_data, timestamp = user_info_cache[token]
+            if datetime.now() - timestamp < CACHE_DURATION:
+                return cached_data
+        return None
+
+def set_cached_user_info(token, user_info):
+    """Cache user info with current timestamp"""
+    with cache_lock:
+        user_info_cache[token] = (user_info, datetime.now())
+
 def exchange_code_for_tokens(code):
     """Exchange authorization code for tokens"""
     token_url = f"https://{AUTH0_DOMAIN}/oauth/token"
@@ -105,6 +142,72 @@ def exchange_code_for_tokens(code):
             logger.error(f"Response content: {e.response.text}")
         raise RuntimeError(f"Failed to exchange code for tokens: {str(e)}")
 
+def get_user_info_from_supabase(token):
+    """Get user info from Supabase database."""
+    try:
+        # Extract user ID from token
+        decoded_token = jwt.decode(token, options={"verify_signature": False})
+        user_id = decoded_token.get('sub')
+        
+        if not user_id:
+            logger.warning("No user ID found in token")
+            return None
+            
+        # Query Supabase for user info
+        user = Users.query.filter_by(auth0_id=user_id).first()
+        if user:
+            try:
+                # Convert user object to dictionary
+                user_dict = user.to_dict()
+                logger.info(f"Successfully retrieved user info from Supabase for user {user_id}")
+                return user_dict
+            except Exception as e:
+                logger.error(f"Error processing user data: {str(e)}")
+                return None
+        return None
+        
+    except Exception as e:
+        logger.error(f"Error getting user info from Supabase: {str(e)}")
+        return None
+
+def store_user_info_in_supabase(user_info):
+    """Store or update user info in Supabase database."""
+    try:
+        auth0_id = user_info.get('sub')
+        if not auth0_id:
+            return
+            
+        # Check if user exists
+        existing_user = Users.query.filter_by(auth0_id=auth0_id).first()
+        
+        if existing_user:
+            # Update existing user
+            existing_user.email = user_info.get('email')
+            existing_user.email_verified = user_info.get('email_verified')
+            existing_user.picture = user_info.get('picture')  # Store Auth0 picture
+            existing_user.last_login = datetime.utcnow()
+            logger.info(f"Updated user {auth0_id} with picture: {user_info.get('picture')}")
+        else:
+            # Create new user
+            new_user = Users(
+                auth0_id=auth0_id,
+                email=user_info.get('email'),
+                email_verified=user_info.get('email_verified'),
+                picture=user_info.get('picture'),  # Store Auth0 picture
+                created_at=datetime.utcnow(),
+                last_login=datetime.utcnow(),
+                is_active=True
+            )
+            db.session.add(new_user)
+            logger.info(f"Created new user {auth0_id} with picture: {user_info.get('picture')}")
+            
+        db.session.commit()
+        
+    except Exception as e:
+        logger.error(f"Error storing user info in Supabase: {str(e)}")
+        db.session.rollback()
+        raise
+
 def requires_auth(f):
     @wraps(f)
     def decorated(*args, **kwargs):
@@ -114,7 +217,14 @@ def requires_auth(f):
         
         try:
             token = auth_header.split(' ')[1]
-            # Get user info directly from Auth0
+            
+            # Check cache first
+            cached_user_info = get_cached_user_info(token)
+            if cached_user_info:
+                request.user = cached_user_info
+                return f(*args, **kwargs)
+            
+            # If not in cache, get from Auth0
             userinfo_url = f"https://{AUTH0_DOMAIN}/userinfo"
             userinfo_response = requests.get(
                 userinfo_url,
@@ -126,6 +236,15 @@ def requires_auth(f):
                 return jsonify({"error": "Failed to get user info from Auth0"}), 401
                 
             user_info = userinfo_response.json()
+            
+            # Ensure required fields are present
+            user_info.setdefault('picture', None)
+            user_info.setdefault('name', user_info.get('email', '').split('@')[0])
+            user_info.setdefault('email_verified', False)
+            user_info.setdefault('updated_at', datetime.utcnow().isoformat())
+            
+            # Cache the user info
+            set_cached_user_info(token, user_info)
             
             # Add user info to request
             request.user = user_info
@@ -239,15 +358,17 @@ def userinfo():
             if db_user:
                 user_info['db_user'] = db_user
                 logger.info(f"Successfully retrieved user {db_user['email']} from database")
+            else:
+                # Create user if not found
+                db_user = create_or_update_user(user_info)
+                if db_user:
+                    user_info['db_user'] = db_user
+                    logger.info(f"Created new user {db_user['email']} in database")
+                else:
+                    logger.error("Failed to create user in database")
         except Exception as e:
             logger.error(f"Error getting user from database: {str(e)}")
             # Continue without database user info
-
-        # Ensure all required fields are present
-        user_info.setdefault('picture', None)
-        user_info.setdefault('name', user_info.get('email', '').split('@')[0])
-        user_info.setdefault('email_verified', False)
-        user_info.setdefault('updated_at', user_info.get('updated_at', datetime.utcnow().isoformat()))
 
         return jsonify({
             "user": user_info

@@ -40,8 +40,9 @@ const LoginButton = () => {
 
           // Store tokens and user info
           if (data.tokens?.access_token) {
-            sessionStorage.setItem('access_token', data.tokens.access_token);
-            console.log('Stored access token');
+            localStorage.setItem('access_token', data.tokens.access_token);
+            localStorage.setItem('tokens', JSON.stringify(data.tokens));
+            console.log('Stored access token in localStorage');
           }
           
           if (data.user) {
@@ -70,6 +71,47 @@ const LoginButton = () => {
       setIsLoading(true);
       setError(null);
       console.log('Starting login process...');
+
+      // Check for existing access token
+      const existingToken = localStorage.getItem('access_token');
+      if (existingToken) {
+        console.log('Found existing access token, attempting to get user info...');
+        try {
+          const response = await fetch('http://localhost:5001/userinfo', {
+            headers: {
+              'Authorization': `Bearer ${existingToken}`,
+              'Content-Type': 'application/json'
+            }
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            console.log('Successfully retrieved user info with existing token');
+            
+            // Store user info if not already present
+            if (data.user && !localStorage.getItem('user_info')) {
+              localStorage.setItem('user_info', JSON.stringify(data.user));
+            }
+            
+            // Redirect to saved return URL or home
+            const returnTo = localStorage.getItem('returnTo') || '/';
+            localStorage.removeItem('returnTo');
+            navigate(returnTo);
+            return;
+          } else {
+            console.log('Existing token invalid, clearing storage and proceeding with new login');
+            localStorage.clear();
+          }
+        } catch (err) {
+          console.error('Error verifying existing token:', err);
+          localStorage.clear();
+        }
+      }
+      
+      // If we get here, either no token exists or it's invalid
+      // Clear any existing auth data
+      localStorage.clear();
+      sessionStorage.clear();
       
       const response = await fetch("http://localhost:5001/login");
       if (!response.ok) {
@@ -83,7 +125,14 @@ const LoginButton = () => {
       if (data.auth_url) {
         // Store the current URL to redirect back after login
         localStorage.setItem('returnTo', window.location.pathname);
-        window.location.href = data.auth_url;
+        
+        // Add prompt=login to force re-authentication
+        const loginUrl = new URL(data.auth_url);
+        loginUrl.searchParams.set('prompt', 'login');
+        loginUrl.searchParams.set('response_type', 'code');
+        loginUrl.searchParams.set('scope', 'openid profile email');
+        
+        window.location.href = loginUrl.toString();
       } else {
         throw new Error('No auth URL received');
       }

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, TextField, Avatar, Menu, MenuItem, IconButton } from '@mui/material';
+import { Box, Typography, Button, TextField, Avatar, Menu, MenuItem, IconButton, Tooltip } from '@mui/material';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -10,12 +10,22 @@ import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
-const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout }) => {
+const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin }) => {
   const [error, setError] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
-  const [isAdmin, setIsAdmin] = useState(false);
+  const [isProcessingCode, setIsProcessingCode] = useState(false);
+  const [lastTokenVerification, setLastTokenVerification] = useState(null);
+  const TOKEN_VERIFICATION_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+
   const navigate = useNavigate();
   const location = useLocation();
+
+  useEffect(() => {
+    console.log('=== Header Debug Info ===');
+    console.log('User Info:', userInfo);
+    console.log('Is Admin:', isAdmin);
+    console.log('==========================');
+  }, [userInfo, isAdmin]);
 
   useEffect(() => {
     const urlParams = new URLSearchParams(location.search);
@@ -26,109 +36,153 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
     if (error) {
       console.error('Auth0 error:', error, errorDescription);
       setError(`Authentication error: ${errorDescription || error}`);
-      // Clean up the URL
       navigate('/', { replace: true });
       return;
     }
 
-    if (code) {
+    if (code && !isProcessingCode) {
       console.log('Received Auth0 code:', code);
-      // Only exchange code if we haven't already processed it
-      const processedCode = sessionStorage.getItem("processed_code");
-      if (code !== processedCode) {
-        sessionStorage.setItem("processed_code", code);
-        exchangeCodeForToken(code);
+      const processedCodes = JSON.parse(localStorage.getItem('processed_codes') || '[]');
+      if (processedCodes.includes(code)) {
+        console.log('Code already processed, skipping');
+        return;
       }
-      // Clean up the URL after processing the code
+      setIsProcessingCode(true);
+      exchangeCodeForToken(code);
       navigate('/', { replace: true });
     }
-  }, [location, navigate]);
+  }, [location, navigate, isProcessingCode]);
 
   const exchangeCodeForToken = async (code) => {
     try {
-      console.log('Exchanging code for token...');
-      setError(null);
+      const processedCodes = JSON.parse(localStorage.getItem('processed_codes') || '[]');
+      if (processedCodes.includes(code)) {
+        console.log('Code already processed, skipping');
+        return;
+      }
       
       const response = await fetch('http://localhost:5001/callback', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          code,
-          redirect_uri: 'http://localhost:5173',
-        }),
+        body: JSON.stringify({ code }),
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to exchange code for token');
+        throw new Error(errorData.error || 'Failed to exchange code for tokens');
       }
 
       const data = await response.json();
-      console.log('Received tokens and user info from backend');
+      console.log('Received tokens and user info:', {
+        hasAccessToken: !!data.tokens?.access_token,
+        hasUserInfo: !!data.user
+      });
       
-      // Store tokens and user info
-      sessionStorage.setItem('access_token', data.tokens.access_token);
-      sessionStorage.setItem('id_token', data.tokens.id_token);
-      localStorage.setItem('user_info', JSON.stringify(data.user));
-      localStorage.setItem('tokens', JSON.stringify(data.tokens));
-      
-      // Reload the page to update the state
+      if (data.tokens?.access_token) {
+        localStorage.setItem('tokens', JSON.stringify(data.tokens));
+        localStorage.setItem('user_info', JSON.stringify(data.user));
+        localStorage.setItem('access_token', data.tokens.access_token);
+        setLastTokenVerification(Date.now());
+        console.log('Stored tokens and user info in localStorage');
+      }
+
+      processedCodes.push(code);
+      localStorage.setItem('processed_codes', JSON.stringify(processedCodes));
+
       window.location.reload();
-      
     } catch (error) {
-      console.error('Token exchange error:', error);
+      console.error('Error exchanging code for tokens:', error);
+      clearAllData();
       setError(error.message);
       onLogout();
+    } finally {
+      setIsProcessingCode(false);
     }
   };
 
-  const handleMenuOpen = (event) => {
-    setAnchorEl(event.currentTarget);
-  };
+  const verifyToken = async () => {
+    const accessToken = localStorage.getItem('access_token');
+    if (!accessToken) {
+      console.log('No access token found in localStorage');
+      return;
+    }
 
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-  };
-
-  const handleProfileClick = () => {
-    handleMenuClose();
-    navigate('/profile', { replace: true });
-  };
-
-  const handleAdminClick = async () => {
-    handleMenuClose();
-    const token = sessionStorage.getItem('access_token');
-    if (!token) {
-      navigate('/');
+    const now = Date.now();
+    if (lastTokenVerification && (now - lastTokenVerification) < TOKEN_VERIFICATION_INTERVAL) {
+      console.log('Using cached token verification');
       return;
     }
 
     try {
-      const response = await fetch('http://localhost:5001/api/admin/check', {
+      const response = await fetch('http://localhost:5001/userinfo', {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
         }
       });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          console.log('Token expired or invalid, clearing data');
+          clearAllData();
+          return;
+        }
+        throw new Error('Token verification failed');
+      }
+
+      const data = await response.json();
+      console.log('Token verified successfully:', {
+        hasUserInfo: !!data.user,
+        userEmail: data.user?.email
+      });
       
-      if (response.ok) {
-        setIsAdmin(true);
-        navigate('/admin');
-      } else {
-        setIsAdmin(false);
-        // Optionally show an error message or redirect
-        navigate('/');
+      if (data.user) {
+        localStorage.setItem('user_info', JSON.stringify(data.user));
+        setLastTokenVerification(now);
       }
     } catch (error) {
-      console.error('Error checking admin status:', error);
-      setIsAdmin(false);
-      navigate('/');
+      console.error('Token verification error:', error);
+      clearAllData();
+      onLogout();
     }
   };
 
-  const handleLogoutClick = () => {
-    handleMenuClose();
+  useEffect(() => {
+    if (userInfo) {
+      verifyToken();
+    }
+  }, [userInfo]);
+
+  const clearAllData = () => {
+    localStorage.removeItem('tokens');
+    localStorage.removeItem('user_info');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('processed_codes');
+    setLastTokenVerification(null);
+  };
+
+  const handleMenu = (event) => {
+    setAnchorEl(event.currentTarget);
+  };
+
+  const handleClose = () => {
+    setAnchorEl(null);
+  };
+
+  const handleProfile = () => {
+    handleClose();
+    navigate('/profile');
+  };
+
+  const handleAdminPanel = () => {
+    handleClose();
+    navigate('/admin');
+  };
+
+  const handleLogout = () => {
+    handleClose();
     onLogout();
   };
 
@@ -168,103 +222,62 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
       }}>
         <TextField
           fullWidth
-          size="small"
+          variant="outlined"
           placeholder="Search decks..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={(e) => e.key === 'Enter' && onSearch()}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              '& fieldset': {
-                borderColor: '#e0e0e0',
-              },
-              '&:hover fieldset': {
-                borderColor: '#bdbdbd',
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: '#1976d2',
-              },
-              bgcolor: '#f5f5f5',
-              borderRadius: '8px',
-            },
+          InputProps={{
+            startAdornment: <SearchIcon sx={{ color: '#666666', mr: 1 }} />,
           }}
         />
-        <Button
-          variant="outlined"
-          onClick={onSearch}
-          sx={{ 
-            minWidth: 'auto',
-            p: 1,
-            borderColor: '#e0e0e0',
-            color: '#666666',
-            '&:hover': {
-              borderColor: '#bdbdbd',
-              bgcolor: '#f5f5f5',
-            }
-          }}
-        >
-          <SearchIcon />
-        </Button>
       </Box>
 
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
         {userInfo ? (
           <>
             {isAdmin && (
-              <IconButton
-                color="inherit"
-                onClick={() => navigate('/admin')}
-                title="Admin Dashboard"
-              >
-                <AdminPanelSettingsIcon />
-              </IconButton>
+              <Tooltip title="Admin Panel">
+                <IconButton
+                  color="inherit"
+                  onClick={handleAdminPanel}
+                  sx={{ 
+                    mr: 1,
+                    color: '#1976d2',
+                    '&:hover': {
+                      backgroundColor: 'rgba(25, 118, 210, 0.04)'
+                    }
+                  }}
+                >
+                  <AdminPanelSettingsIcon />
+                </IconButton>
+              </Tooltip>
             )}
-            <IconButton
-              onClick={handleMenuOpen}
-              sx={{ 
-                p: 1,
-                '&:hover': {
-                  bgcolor: 'rgba(0, 0, 0, 0.04)',
-                }
-              }}
-            >
-              {userInfo.picture ? (
+            <Button
+              color="inherit"
+              onClick={handleMenu}
+              startIcon={
                 <Avatar
-                  src={userInfo.picture}
                   alt={userInfo.name || userInfo.email}
+                  src={userInfo.picture || userInfo.db_user?.picture}
                   sx={{ width: 32, height: 32 }}
                 />
-              ) : (
-                <AccountCircleIcon sx={{ fontSize: 32, color: '#666666' }} />
-              )}
-            </IconButton>
+              }
+            >
+              {userInfo.name || userInfo.email?.split('@')[0]}
+            </Button>
             <Menu
               anchorEl={anchorEl}
               open={Boolean(anchorEl)}
-              onClose={handleMenuClose}
-              PaperProps={{
-                sx: {
-                  mt: 1,
-                  minWidth: 200,
-                  borderRadius: 0,
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                }
-              }}
+              onClose={handleClose}
             >
-              <MenuItem onClick={handleProfileClick}>
-                <PersonIcon sx={{ mr: 1, fontSize: 20 }} />
-                Profile
-              </MenuItem>
+              <MenuItem onClick={handleProfile}>Profile</MenuItem>
               {isAdmin && (
-                <MenuItem onClick={handleAdminClick}>
-                  <AdminPanelSettingsIcon sx={{ mr: 1, fontSize: 20 }} />
-                  Admin Dashboard
+                <MenuItem onClick={handleAdminPanel}>
+                  <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Panel
                 </MenuItem>
               )}
-              <MenuItem onClick={handleLogoutClick}>
-                <LogoutIcon sx={{ mr: 1, fontSize: 20 }} />
-                Logout
-              </MenuItem>
+              <MenuItem onClick={handleLogout}>Logout</MenuItem>
             </Menu>
           </>
         ) : (

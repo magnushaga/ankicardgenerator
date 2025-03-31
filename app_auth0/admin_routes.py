@@ -3,10 +3,15 @@ from functools import wraps
 from access_control import Role, ResourceType, Permission, get_user_role, assign_role, remove_role
 from supabase_config import supabase
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from admin_models import AdminRole, AdminPermission, AdminRolePermission, UserAdminRole, AdminAuditLog
 import os
+import jwt
+from jwt.algorithms import RSAAlgorithm
+import json
 import requests
+import time
+from functools import lru_cache
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -15,66 +20,175 @@ logger = logging.getLogger(__name__)
 # Create admin blueprint
 admin = Blueprint('admin', __name__)
 
+# Token verification cache
+token_cache = {}
+TOKEN_CACHE_DURATION = timedelta(minutes=5)  # Cache tokens for 5 minutes
+
+# Supabase query cache
+supabase_cache = {}
+SUPABASE_CACHE_DURATION = timedelta(minutes=1)  # Cache Supabase queries for 1 minute
+
+def get_cached_supabase_query(table, query_params=None, cache_key=None):
+    """Get cached Supabase query result or execute new query"""
+    try:
+        # Generate cache key if not provided
+        if not cache_key:
+            cache_key = f"{table}_{json.dumps(query_params or {})}"
+            
+        # Check cache
+        if cache_key in supabase_cache:
+            cache_entry = supabase_cache[cache_key]
+            if datetime.now() - cache_entry['timestamp'] < SUPABASE_CACHE_DURATION:
+                logger.info(f"Using cached Supabase query for {table}")
+                return cache_entry['data']
+            else:
+                logger.info(f"Cache expired for {table}, executing new query")
+                del supabase_cache[cache_key]
+        
+        # Execute query with retry logic
+        max_retries = 3
+        retry_delay = 1  # seconds
+        
+        for attempt in range(max_retries):
+            try:
+                # Start with base query
+                query = supabase.table(table).select('*')
+                
+                # Apply query parameters if provided
+                if query_params:
+                    for key, value in query_params.items():
+                        if key == 'order':
+                            for field, direction in value.items():
+                                query = query.order(field, desc=(direction == 'desc'))
+                        elif key == 'limit':
+                            query = query.limit(value)
+                        else:
+                            query = getattr(query, key)(value)
+                
+                # Execute the query
+                result = query.execute()
+                
+                # Cache the result
+                supabase_cache[cache_key] = {
+                    'data': result.data,
+                    'timestamp': datetime.now()
+                }
+                
+                return result.data
+                
+            except Exception as e:
+                if attempt < max_retries - 1:
+                    logger.warning(f"Supabase query attempt {attempt + 1} failed: {str(e)}")
+                    time.sleep(retry_delay * (attempt + 1))  # Exponential backoff
+                else:
+                    raise
+                    
+    except Exception as e:
+        logger.error(f"Error in Supabase query: {str(e)}")
+        raise
+
 def is_admin(user_id):
     """Check if a user has admin privileges"""
     try:
         logger.info(f"Checking admin status for user: {user_id}")
-        # First check if user is super admin
-        if user_id == '845cd193-4692-4e7b-8951-db948424c240':
+        
+        # Check for super admin
+        if user_id == "845cd193-4692-4e7b-8951-db948424c240":
             logger.info("User is super admin")
             return True
             
-        # Then check if user has admin role
+        # Check user's admin roles
         result = supabase.table('user_admin_roles').select('role_id').eq('user_id', user_id).execute()
-        logger.info(f"User admin roles query result: {result.data}")
+        if not result.data:
+            logger.info("User has no admin roles")
+            return False
+            
+        # Get the role names
+        role_ids = [role['role_id'] for role in result.data]
+        roles_result = supabase.table('admin_roles').select('name').in_('id', role_ids).execute()
         
-        if result.data:
-            # Check if any of the user's roles are admin roles
-            role_ids = [role['role_id'] for role in result.data]
-            admin_roles = supabase.table('admin_roles').select('id').in_('id', role_ids).execute()
-            logger.info(f"Admin roles query result: {admin_roles.data}")
+        if not roles_result.data:
+            logger.info("No admin roles found")
+            return False
             
-            is_admin = bool(admin_roles.data)
-            logger.info(f"User has admin role: {is_admin}")
-            return is_admin
-            
-        logger.info("User has no admin roles")
-        return False
+        role_names = [role['name'] for role in roles_result.data]
+        logger.info(f"User has admin roles: {role_names}")
+        return True
+        
     except Exception as e:
         logger.error(f"Error checking admin status: {str(e)}")
         return False
+
+def verify_token_with_cache(token):
+    """Verify token with Auth0 and cache the result"""
+    try:
+        # Check cache first
+        if token in token_cache:
+            cache_entry = token_cache[token]
+            if datetime.now() - cache_entry['timestamp'] < TOKEN_CACHE_DURATION:
+                logger.info("Using cached token verification")
+                return cache_entry['user_info']
+            else:
+                logger.info("Cache expired, verifying token again")
+                del token_cache[token]
+        
+        # Verify with Auth0
+        auth0_domain = os.getenv('AUTH0_DOMAIN')
+        if not auth0_domain:
+            logger.error("Auth0 domain not configured")
+            return None
+            
+        url = f"https://{auth0_domain}/userinfo"
+        headers = {'Authorization': f'Bearer {token}'}
+        
+        response = requests.get(url, headers=headers)
+        if response.status_code == 429:
+            logger.warning("Auth0 rate limit hit, using cached result if available")
+            if token in token_cache:
+                return token_cache[token]['user_info']
+            return None
+            
+        response.raise_for_status()
+        user_info = response.json()
+        
+        # Cache the result
+        token_cache[token] = {
+            'user_info': user_info,
+            'timestamp': datetime.now()
+        }
+        
+        return user_info
+        
+    except Exception as e:
+        logger.error(f"Error verifying token: {str(e)}")
+        return None
 
 def requires_admin(f):
     """Decorator to require admin access"""
     @wraps(f)
     def decorated(*args, **kwargs):
-        auth_header = request.headers.get('Authorization')
-        logger.info(f"Admin check - Auth header present: {bool(auth_header)}")
-        
-        if not auth_header:
-            return jsonify({"error": "No authorization header"}), 401
-            
         try:
-            # Get user info from Auth0
-            token = auth_header.split(' ')[1]
-            logger.info("Admin check - Token extracted from header")
-            
-            userinfo_url = f"https://{os.getenv('AUTH0_DOMAIN')}/userinfo"
-            logger.info(f"Admin check - Auth0 domain: {os.getenv('AUTH0_DOMAIN')}")
-            
-            userinfo_response = requests.get(
-                userinfo_url,
-                headers={"Authorization": f"Bearer {token}"}
-            )
-            
-            if not userinfo_response.ok:
-                logger.error(f"Admin check - Auth0 userinfo request failed: {userinfo_response.text}")
-                return jsonify({"error": "Failed to get user info"}), 401
+            # Get token from header
+            auth_header = request.headers.get('Authorization')
+            if not auth_header or not auth_header.startswith('Bearer '):
+                logger.error("No valid Authorization header")
+                return jsonify({"error": "No authorization header"}), 401
                 
-            user_info = userinfo_response.json()
-            auth0_id = user_info.get('sub')
-            logger.info(f"Admin check - Auth0 ID: {auth0_id}")
+            token = auth_header.split(' ')[1]
+            logger.info(f"Admin check - Auth header present: True")
+            logger.info(f"Admin check - Token format: {token[:20]}...")
             
+            # Verify token with caching
+            user_info = verify_token_with_cache(token)
+            if not user_info:
+                logger.error("Token verification failed")
+                return jsonify({"error": "Invalid token"}), 401
+                
+            auth0_id = user_info.get('sub')
+            if not auth0_id:
+                logger.error("No user ID in token")
+                return jsonify({"error": "Invalid user info"}), 401
+                
             # Get user ID from our database
             user_result = supabase.table('users').select('id').eq('auth0_id', auth0_id).execute()
             if not user_result.data:
@@ -100,16 +214,11 @@ def requires_admin(f):
 @admin.route('/check', methods=['GET'])
 @requires_admin
 def check_admin():
-    """Check if user has admin access"""
+    """Check if the current user has admin access"""
     logger.info("Admin check endpoint called")
-    auth_header = request.headers.get('Authorization')
-    logger.info(f"Auth header present: {bool(auth_header)}")
-    if auth_header:
-        logger.info(f"Auth header starts with: {auth_header[:20]}...")
-    
     return jsonify({
-        "message": "Admin access granted",
-        "status": "success"
+        "status": "success",
+        "message": "Admin access granted"
     })
 
 @admin.route('/users', methods=['GET'])
@@ -117,44 +226,53 @@ def check_admin():
 def get_users():
     """Get all users"""
     try:
-        result = supabase.table('users').select('*').execute()
-        return jsonify(result.data)
+        result = get_cached_supabase_query('users')
+        return jsonify({
+            'users': result,
+            'total': len(result)
+        })
     except Exception as e:
         logger.error(f"Error getting users: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to fetch users. Please try again later."}), 500
 
 @admin.route('/roles', methods=['GET'])
 @requires_admin
 def get_roles():
     """Get all admin roles"""
     try:
-        result = supabase.table('admin_roles').select('*').execute()
-        return jsonify(result.data)
+        result = get_cached_supabase_query('admin_roles')
+        return jsonify(result)
     except Exception as e:
         logger.error(f"Error getting roles: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to fetch roles. Please try again later."}), 500
 
 @admin.route('/permissions', methods=['GET'])
 @requires_admin
 def get_permissions():
     """Get all admin permissions"""
     try:
-        result = supabase.table('admin_permissions').select('*').execute()
-        return jsonify(result.data)
+        result = get_cached_supabase_query('admin_permissions')
+        return jsonify(result)
     except Exception as e:
         logger.error(f"Error getting permissions: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to fetch permissions. Please try again later."}), 500
 
 @admin.route('/audit-logs', methods=['GET'])
 @requires_admin
 def get_audit_logs():
     """Get admin audit logs"""
     try:
-        result = supabase.table('admin_audit_logs').select('*').order('created_at', desc=True).limit(100).execute()
-        return jsonify(result.data)
+        result = get_cached_supabase_query(
+            'admin_audit_logs',
+            {'order': {'created_at': 'desc'}, 'limit': 100}
+        )
+        return jsonify({
+            'logs': result,
+            'total': len(result)
+        })
     except Exception as e:
         logger.error(f"Error getting audit logs: {str(e)}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": "Failed to fetch audit logs. Please try again later."}), 500
 
 def requires_admin_permission(permission):
     def decorator(f):
