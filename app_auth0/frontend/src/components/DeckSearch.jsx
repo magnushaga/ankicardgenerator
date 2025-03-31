@@ -59,7 +59,7 @@ const DeckSearch = ({ userInfo: propUserInfo, accessToken: propAccessToken }) =>
         } catch (err) {
           console.error('Token verification error:', err);
           // Clear invalid session
-          sessionStorage.removeItem('access_token');
+          localStorage.removeItem('access_token');
           localStorage.removeItem('user_info');
           localStorage.removeItem('tokens');
           setIsAuthenticated(false);

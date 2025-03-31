@@ -49,6 +49,11 @@ def create_or_update_user(auth0_user):
         if not existing_user.data:
             # Create new user
             logger.info(f"Creating new user: {user_data['email']}")
+            # Add picture for new users if available
+            if auth0_user.get('picture'):
+                user_data['picture'] = auth0_user['picture']
+                logger.info(f"Added picture for new user: {user_data['email']}")
+            
             result = supabase.table('users').insert(user_data).execute()
             if not result.data:
                 logger.error("Failed to create user in Supabase")
@@ -58,12 +63,25 @@ def create_or_update_user(auth0_user):
             # Update existing user
             existing_id = existing_user.data[0]['id']
             logger.info(f"Updating existing user: {user_data['email']}")
-            result = supabase.table('users').update({
+            
+            # Special handling for admin user
+            if existing_id == "845cd193-4692-4e7b-8951-db948424c240":
+                if auth0_user.get('picture'):
+                    user_data['picture'] = auth0_user['picture']
+                    logger.info(f"Updated admin user picture")
+            
+            update_data = {
                 'email': user_data['email'],
                 'username': user_data['username'],
                 'last_login': user_data['last_login'],
                 'email_verified': user_data['email_verified']
-            }).eq('id', existing_id).execute()
+            }
+            
+            # Add picture to update data if it exists in user_data
+            if 'picture' in user_data:
+                update_data['picture'] = user_data['picture']
+            
+            result = supabase.table('users').update(update_data).eq('id', existing_id).execute()
             
             if not result.data:
                 logger.error("Failed to update user in Supabase")

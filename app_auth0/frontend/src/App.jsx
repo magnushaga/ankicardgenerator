@@ -9,94 +9,186 @@ import DeckHierarchyViewer from './components/DeckHierarchyViewer';
 import DeckViewer from './components/DeckViewer';
 import StudyDeck from './components/StudyDeck';
 import AdminDashboard from './components/AdminDashboard';
+import LogoutButton from './components/LogoutButton';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
   const [userInfo, setUserInfo] = useState(null);
   const [tokens, setTokens] = useState(null);
   const [error, setError] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [lastTokenVerification, setLastTokenVerification] = useState(null);
+  const TOKEN_VERIFICATION_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
 
-  useEffect(() => {
-    // Check for Auth0 callback
-    const handleCallback = async () => {
-      const code = new URLSearchParams(window.location.search).get('code');
-      if (code) {
-        try {
-          console.log('Received Auth0 code:', code);
-          const response = await fetch('http://localhost:5001/callback', {
-            method: 'POST',
+  const loadSavedData = async () => {
+    try {
+      const savedUserInfo = localStorage.getItem('user_info');
+      const savedTokens = localStorage.getItem('tokens');
+      const accessToken = localStorage.getItem('access_token');
+
+      console.log('=== App.jsx Debug Info ===');
+      console.log('Current User Info:', savedUserInfo ? JSON.parse(savedUserInfo) : null);
+      console.log('Current Tokens:', savedTokens ? JSON.parse(savedTokens) : null);
+      console.log('Access Token from localStorage:', accessToken ? 'Found' : 'Not found');
+      console.log('==========================');
+
+      if (accessToken) {
+        const now = Date.now();
+        if (!lastTokenVerification || (now - lastTokenVerification) >= TOKEN_VERIFICATION_INTERVAL) {
+          // Verify token with backend
+          const response = await fetch('http://localhost:5001/userinfo', {
             headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ code }),
+              'Authorization': `Bearer ${accessToken}`,
+              'Content-Type': 'application/json'
+            }
           });
 
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to exchange code for token');
+          if (response.ok) {
+            const data = await response.json();
+            if (data.user) {
+              setUserInfo(data.user);
+              localStorage.setItem('user_info', JSON.stringify(data.user));
+              setLastTokenVerification(now);
+            }
+          } else if (response.status === 401) {
+            console.log('Token expired or invalid, clearing data');
+            clearAllData();
           }
-
-          const data = await response.json();
-          console.log('Received user data:', data);
-
-          // Store tokens and user info
-          setTokens(data.tokens);
-          setUserInfo(data.user);
-          
-          // Store access token in sessionStorage and other data in localStorage
-          if (data.tokens?.access_token) {
-            sessionStorage.setItem('access_token', data.tokens.access_token);
-            console.log('Stored access token in sessionStorage');
+        } else {
+          // Use cached data
+          if (savedUserInfo) {
+            setUserInfo(JSON.parse(savedUserInfo));
           }
-          localStorage.setItem('user_info', JSON.stringify(data.user));
-          localStorage.setItem('tokens', JSON.stringify(data.tokens));
-
-          // Redirect to stored return URL or profile
-          const returnTo = localStorage.getItem('returnTo') || '/profile';
-          localStorage.removeItem('returnTo');
-          navigate(returnTo);
-        } catch (error) {
-          console.error('Token exchange error:', error);
-          setError(error.message);
         }
       }
-    };
 
-    handleCallback();
-  }, [navigate]);
+      if (savedTokens) {
+        setTokens(JSON.parse(savedTokens));
+      }
+    } catch (error) {
+      console.error('Error loading saved data:', error);
+      clearAllData();
+    }
+  };
 
   useEffect(() => {
-    // Load saved user info and tokens
-    const savedUserInfo = localStorage.getItem("user_info");
-    const savedTokens = localStorage.getItem("tokens");
-    const accessToken = sessionStorage.getItem("access_token");
-    
-    if (savedUserInfo && savedTokens && accessToken) {
-      try {
-        setUserInfo(JSON.parse(savedUserInfo));
-        setTokens(JSON.parse(savedTokens));
-        console.log('Loaded saved user data and tokens');
-      } catch (err) {
-        console.error('Error parsing stored data:', err);
+    loadSavedData();
+  }, []);
+
+  // Set up periodic token verification
+  useEffect(() => {
+    if (userInfo) {
+      const interval = setInterval(() => {
+        const accessToken = localStorage.getItem('access_token');
+        if (accessToken) {
+          verifyToken(accessToken);
+        }
+      }, TOKEN_VERIFICATION_INTERVAL);
+
+      return () => clearInterval(interval);
+    }
+  }, [userInfo]);
+
+  const verifyToken = async (accessToken) => {
+    try {
+      const response = await fetch('http://localhost:5001/userinfo', {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.user) {
+          setUserInfo(data.user);
+          localStorage.setItem('user_info', JSON.stringify(data.user));
+          setLastTokenVerification(Date.now());
+        }
+      } else if (response.status === 401) {
+        console.log('Token expired or invalid, clearing data');
         clearAllData();
       }
+    } catch (error) {
+      console.error('Token verification error:', error);
+      clearAllData();
     }
-  }, []);
+  };
+
+  const clearAllData = () => {
+    localStorage.removeItem('tokens');
+    localStorage.removeItem('user_info');
+    localStorage.removeItem('access_token');
+    localStorage.removeItem('processed_codes');
+    setUserInfo(null);
+    setTokens(null);
+    setLastTokenVerification(null);
+  };
+
+  const handleLogout = () => {
+    clearAllData();
+  };
 
   const handleSearch = () => {
     console.log('Searching for:', searchQuery);
   };
 
-  const clearAllData = () => {
-    localStorage.removeItem("user_info");
-    localStorage.removeItem("tokens");
-    sessionStorage.removeItem("access_token");
-    setUserInfo(null);
-    setTokens(null);
-    setError(null);
+  const checkAdminStatus = async () => {
+    try {
+      const token = localStorage.getItem('access_token');
+      if (!token) {
+        console.log('No access token found for admin check');
+        return;
+      }
+
+      console.log('Checking admin status...');
+      console.log('Token format:', token.substring(0, 20) + '...');
+      
+      // First verify the token is valid by getting user info
+      const userInfoResponse = await fetch('http://localhost:5001/userinfo', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (!userInfoResponse.ok) {
+        console.log('Token verification failed:', userInfoResponse.status);
+        setIsAdmin(false);
+        return;
+      }
+
+      console.log('Token verified, checking admin status...');
+      const response = await fetch('http://localhost:5001/api/admin/check', {
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('Admin check response:', response.status);
+      if (response.ok) {
+        console.log('User is an admin');
+        setIsAdmin(true);
+      } else {
+        console.log('User is not an admin');
+        setIsAdmin(false);
+      }
+    } catch (err) {
+      console.error('Error checking admin status:', err);
+      setIsAdmin(false);
+    }
   };
+
+  useEffect(() => {
+    if (userInfo) {
+      console.log('User info updated, checking admin status...');
+      checkAdminStatus();
+    }
+  }, [userInfo]);
 
   return (
     <Box sx={{ 
@@ -111,7 +203,8 @@ function AppContent() {
         onSearch={handleSearch}
         userInfo={userInfo}
         tokens={tokens}
-        onLogout={clearAllData}
+        onLogout={handleLogout}
+        isAdmin={isAdmin}
       />
       <Box sx={{ flex: 1 }}>
         <Routes>
@@ -119,11 +212,11 @@ function AppContent() {
             path="/" 
             element={
               (() => {
-                const accessToken = sessionStorage.getItem('access_token');
+                const accessToken = localStorage.getItem('access_token');
                 console.log('=== App.jsx Debug Info ===');
                 console.log('Current User Info:', userInfo);
                 console.log('Current Tokens:', tokens);
-                console.log('Access Token from Session:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
+                console.log('Access Token from localStorage:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
                 console.log('==========================');
                 
                 return (
@@ -139,19 +232,19 @@ function AppContent() {
             path="/profile" 
             element={
               userInfo ? (
-                <Profile userInfo={userInfo} />
+                <Profile userInfo={userInfo} onLogout={handleLogout} isAdmin={isAdmin} />
               ) : (
-                <Navigate to="/" replace state={{ from: location }} />
+                <Navigate to="/" />
               )
             } 
           />
           <Route 
             path="/admin" 
             element={
-              userInfo ? (
+              isAdmin ? (
                 <AdminDashboard />
               ) : (
-                <Navigate to="/" replace state={{ from: location }} />
+                <Navigate to="/profile" />
               )
             } 
           />

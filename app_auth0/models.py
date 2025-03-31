@@ -198,7 +198,7 @@ class Users:
     Model class for users table.
     """
 
-    def __init__(self, id=None, email=None, username=None, auth0_id=None, created_at=None, last_login=None, is_active=None, email_verified=None, preferred_study_time=None, notification_preferences=None, study_goals=None):
+    def __init__(self, id=None, email=None, username=None, auth0_id=None, created_at=None, last_login=None, is_active=None, email_verified=None, preferred_study_time=None, notification_preferences=None, study_goals=None, picture=None):
         self.id = id or str(uuid.uuid4())
         self.email = email
         self.username = username
@@ -210,6 +210,7 @@ class Users:
         self.preferred_study_time = preferred_study_time
         self.notification_preferences = notification_preferences
         self.study_goals = study_goals
+        self.picture = picture
 
     def to_dict(self):
         return {
@@ -224,6 +225,7 @@ class Users:
             'preferred_study_time': self.preferred_study_time,
             'notification_preferences': self.notification_preferences,
             'study_goals': self.study_goals,
+            'picture': self.picture
         }
 
     @classmethod
