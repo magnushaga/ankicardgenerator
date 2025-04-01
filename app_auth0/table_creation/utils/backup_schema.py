@@ -64,56 +64,76 @@ def generate_recreation_sql(schema: Dict) -> str:
     # Create tables in order of dependencies
     tables = list(schema.keys())
     created_tables = set()
+    remaining_tables = set(tables)
+    max_iterations = len(tables) * 2  # Prevent infinite loops
     
-    while tables:
-        for table in tables[:]:  # Create a copy to iterate
+    iteration = 0
+    while remaining_tables and iteration < max_iterations:
+        iteration += 1
+        tables_to_create = set()
+        
+        for table in remaining_tables:
             # Check if all dependencies are created
             dependencies = set()
             for fk in schema[table]['foreign_keys']:
                 dependencies.add(fk['referred_table'])
             
             if dependencies.issubset(created_tables):
-                # Generate CREATE TABLE statement
-                columns = []
-                constraints = []
-                
-                # Add columns
-                for col in schema[table]['columns']:
-                    nullable = "NULL" if col['nullable'] else "NOT NULL"
-                    default = f"DEFAULT {col['default']}" if col['default'] != 'None' else ""
-                    columns.append(f"{col['name']} {col['type']} {nullable} {default}".strip())
-                
-                # Add primary key
-                if schema[table]['primary_key']['constrained_columns']:
-                    pk_cols = ', '.join(schema[table]['primary_key']['constrained_columns'])
-                    constraints.append(f"PRIMARY KEY ({pk_cols})")
-                
-                # Add foreign keys
-                for fk in schema[table]['foreign_keys']:
-                    fk_cols = ', '.join(fk['constrained_columns'])
-                    ref_cols = ', '.join(fk['referred_columns'])
-                    constraints.append(
-                        f"FOREIGN KEY ({fk_cols}) REFERENCES {fk['referred_table']}({ref_cols}) ON DELETE CASCADE"
-                    )
-                
-                # Combine columns and constraints
-                all_lines = columns + constraints
-                
-                sql = f"CREATE TABLE IF NOT EXISTS {table} (\n"
-                sql += "    " + ",\n    ".join(all_lines)
-                sql += "\n);"
-                
+                tables_to_create.add(table)
+        
+        if not tables_to_create:
+            # If no tables can be created, we have a circular dependency
+            logging.warning(f"Circular dependency detected. Remaining tables: {remaining_tables}")
+            # Try to create tables with circular dependencies by dropping foreign key constraints
+            for table in remaining_tables:
+                tables_to_create.add(table)
+        
+        for table in tables_to_create:
+            # Generate CREATE TABLE statement
+            columns = []
+            constraints = []
+            
+            # Add columns
+            for col in schema[table]['columns']:
+                nullable = "NULL" if col['nullable'] else "NOT NULL"
+                default = f"DEFAULT {col['default']}" if col['default'] != 'None' else ""
+                columns.append(f"{col['name']} {col['type']} {nullable} {default}".strip())
+            
+            # Add primary key
+            if schema[table]['primary_key']['constrained_columns']:
+                pk_cols = ', '.join(schema[table]['primary_key']['constrained_columns'])
+                constraints.append(f"PRIMARY KEY ({pk_cols})")
+            
+            # Add foreign keys
+            for fk in schema[table]['foreign_keys']:
+                fk_cols = ', '.join(fk['constrained_columns'])
+                ref_cols = ', '.join(fk['referred_columns'])
+                constraints.append(
+                    f"FOREIGN KEY ({fk_cols}) REFERENCES {fk['referred_table']}({ref_cols}) ON DELETE CASCADE"
+                )
+            
+            # Combine columns and constraints
+            all_lines = columns + constraints
+            
+            sql = f"CREATE TABLE IF NOT EXISTS {table} (\n"
+            sql += "    " + ",\n    ".join(all_lines)
+            sql += "\n);"
+            
+            sql_commands.append(sql)
+            
+            # Add indexes
+            for index in schema[table]['indexes']:
+                cols = ', '.join(index['column_names'])
+                idx_name = f"idx_{table}_{('_'.join(index['column_names']))[:30]}"
+                sql = f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({cols});"
                 sql_commands.append(sql)
-                
-                # Add indexes
-                for index in schema[table]['indexes']:
-                    cols = ', '.join(index['column_names'])
-                    idx_name = f"idx_{table}_{('_'.join(index['column_names']))[:30]}"
-                    sql = f"CREATE INDEX IF NOT EXISTS {idx_name} ON {table}({cols});"
-                    sql_commands.append(sql)
-                
-                created_tables.add(table)
-                tables.remove(table)
+            
+            created_tables.add(table)
+            remaining_tables.remove(table)
+    
+    if remaining_tables:
+        logging.error(f"Failed to resolve dependencies for tables: {remaining_tables}")
+        raise ValueError("Unable to resolve table dependencies")
     
     return "\n\n".join(sql_commands)
 
