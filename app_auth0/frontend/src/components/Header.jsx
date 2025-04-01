@@ -1,24 +1,42 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Button, TextField, Avatar, Menu, MenuItem, IconButton, Tooltip } from '@mui/material';
+import {
+  AppBar,
+  Toolbar,
+  Typography,
+  Box,
+  IconButton,
+  TextField,
+  Menu,
+  MenuItem,
+  Avatar,
+  Divider,
+  useTheme,
+  useMediaQuery
+} from '@mui/material';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useTheme as useCustomTheme } from '../lib/ThemeContext';
+import Brightness4Icon from '@mui/icons-material/Brightness4';
+import Brightness7Icon from '@mui/icons-material/Brightness7';
 import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
-import { useNavigate, useLocation } from 'react-router-dom';
+import LogoutIcon from '@mui/icons-material/Logout';
+import PersonIcon from '@mui/icons-material/Person';
 import LoginButton from './LoginButton';
 import LogoutButton from './LogoutButton';
 import SearchIcon from '@mui/icons-material/Search';
-import LogoutIcon from '@mui/icons-material/Logout';
-import PersonIcon from '@mui/icons-material/Person';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
 const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin }) => {
-  const [error, setError] = useState(null);
   const [anchorEl, setAnchorEl] = useState(null);
+  const theme = useTheme();
+  const { isDarkMode, toggleTheme } = useCustomTheme();
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  const [error, setError] = useState(null);
   const [isProcessingCode, setIsProcessingCode] = useState(false);
   const [lastTokenVerification, setLastTokenVerification] = useState(null);
   const TOKEN_VERIFICATION_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
-
-  const navigate = useNavigate();
-  const location = useLocation();
 
   useEffect(() => {
     console.log('=== Header Debug Info ===');
@@ -187,104 +205,112 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
   };
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      justifyContent: 'space-between', 
-      alignItems: 'center',
-      p: 2,
-      borderBottom: '1px solid #e0e0e0',
-      bgcolor: '#ffffff'
-    }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        <MenuBookIcon sx={{ fontSize: 32, color: '#1976d2' }} />
-        <Typography 
-          variant="h6" 
-          component="div" 
-          sx={{ 
-            fontWeight: 600,
-            cursor: 'pointer',
-            color: '#333333'
-          }}
-          onClick={() => navigate('/')}
-        >
-          AnkiCardGen
-        </Typography>
-      </Box>
+    <AppBar 
+      position="static" 
+      elevation={0}
+      sx={{ 
+        bgcolor: 'background.paper',
+        borderBottom: '1px solid',
+        borderColor: 'divider'
+      }}
+    >
+      <Toolbar sx={{ justifyContent: 'space-between' }}>
+        {/* Left side - Logo and Name */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <MenuBookIcon sx={{ color: 'text.primary' }} />
+          <Typography 
+            variant="h6" 
+            component="div" 
+            sx={{ 
+              fontWeight: 600,
+              color: 'text.primary'
+            }}
+          >
+            StudIQ
+          </Typography>
+          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+        </Box>
 
-      <Box sx={{ 
-        display: 'flex', 
-        alignItems: 'center',
-        gap: 2,
-        flexGrow: 1,
-        justifyContent: 'center',
-        maxWidth: '600px',
-        mx: 'auto'
-      }}>
-        <TextField
-          fullWidth
-          variant="outlined"
-          placeholder="Search decks..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && onSearch()}
-          InputProps={{
-            startAdornment: <SearchIcon sx={{ color: '#666666', mr: 1 }} />,
-          }}
-        />
-      </Box>
-
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-        {userInfo ? (
-          <>
-            {isAdmin && (
-              <Tooltip title="Admin Panel">
-                <IconButton
-                  color="inherit"
-                  onClick={handleAdminPanel}
-                  sx={{ 
-                    mr: 1,
-                    color: '#1976d2',
-                    '&:hover': {
-                      backgroundColor: 'rgba(25, 118, 210, 0.04)'
-                    }
-                  }}
-                >
-                  <AdminPanelSettingsIcon />
-                </IconButton>
-              </Tooltip>
-            )}
-            <Button
-              color="inherit"
-              onClick={handleMenu}
-              startIcon={
-                <Avatar
-                  alt={userInfo.name || userInfo.email}
-                  src={userInfo.picture || userInfo.db_user?.picture}
-                  sx={{ width: 32, height: 32 }}
-                />
-              }
-            >
-              {userInfo.name || userInfo.email?.split('@')[0]}
-            </Button>
-            <Menu
-              anchorEl={anchorEl}
-              open={Boolean(anchorEl)}
-              onClose={handleClose}
-            >
-              <MenuItem onClick={handleProfile}>Profile</MenuItem>
-              {isAdmin && (
-                <MenuItem onClick={handleAdminPanel}>
-                  <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Panel
-                </MenuItem>
-              )}
-              <MenuItem onClick={handleLogout}>Logout</MenuItem>
-            </Menu>
-          </>
-        ) : (
-          <LoginButton />
+        {/* Center - Search (only show if user is logged in) */}
+        {userInfo && (
+          <Box sx={{ flex: 1, maxWidth: 600, mx: 4 }}>
+            <TextField
+              fullWidth
+              size="small"
+              placeholder="Search decks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && onSearch()}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: 'background.default',
+                  '& fieldset': {
+                    borderColor: 'divider'
+                  },
+                  '&:hover fieldset': {
+                    borderColor: 'primary.main'
+                  }
+                }
+              }}
+            />
+          </Box>
         )}
-      </Box>
-    </Box>
+
+        {/* Right side - Theme toggle and User menu */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <IconButton 
+            onClick={toggleTheme} 
+            color="inherit"
+            sx={{ color: 'text.primary' }}
+          >
+            {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
+          </IconButton>
+
+          {userInfo ? (
+            <>
+              <IconButton
+                onClick={handleMenu}
+                sx={{ color: 'text.primary' }}
+              >
+                <Avatar 
+                  src={userInfo.picture} 
+                  alt={userInfo.name}
+                  sx={{ width: 32, height: 32 }}
+                >
+                  {!userInfo.picture && <AccountCircleIcon />}
+                </Avatar>
+              </IconButton>
+              <Menu
+                anchorEl={anchorEl}
+                open={Boolean(anchorEl)}
+                onClose={handleClose}
+                PaperProps={{
+                  sx: {
+                    mt: 1.5,
+                    minWidth: 200,
+                    boxShadow: theme.shadows[3]
+                  }
+                }}
+              >
+                <MenuItem onClick={handleProfile}>
+                  <PersonIcon sx={{ mr: 1 }} /> Profile
+                </MenuItem>
+                {isAdmin && (
+                  <MenuItem onClick={handleAdminPanel}>
+                    <PersonIcon sx={{ mr: 1 }} /> Admin Dashboard
+                  </MenuItem>
+                )}
+                <MenuItem onClick={handleLogout}>
+                  <LogoutIcon sx={{ mr: 1 }} /> Logout
+                </MenuItem>
+              </Menu>
+            </>
+          ) : (
+            <LoginButton />
+          )}
+        </Box>
+      </Toolbar>
+    </AppBar>
   );
 };
 

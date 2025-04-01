@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timedelta
 from models import (
     Users, Textbooks, Parts, Chapters, Topics, Decks, Cards,
-    StudySessions, CardReviews
+    StudySessions, CardReviews, SubjectCategories, SubjectSubcategories
 )
 from supabase import create_client
 from dotenv import load_dotenv
@@ -678,6 +678,196 @@ def analyze_textbook():
             "special_notation_needs": []
         }
         return jsonify({"error": str(e), "fallback_analysis": default_analysis}), 500
+
+@api.route('/api/generate-deck', methods=['POST'])
+@requires_auth
+@requires_permission(Permission.CREATE)
+def generate_deck():
+    """Generate a deck from a textbook name and save to PostgreSQL"""
+    data = request.get_json()
+    textbook_name = data.get('textbook_name')
+    
+    if not textbook_name:
+        return jsonify({'error': 'textbook_name is required'}), 400
+        
+    try:
+        # Check subscription status and limits
+        user_id = request.user['sub']
+        subscription = subscription_manager.get_current_subscription(user_id)
+        
+        if not subscription or subscription.status != SubscriptionStatus.ACTIVE:
+            return jsonify({'error': 'Active subscription required for deck generation'}), 403
+            
+        # Check usage limits
+        if not subscription_manager.check_usage_limit(user_id, 'deck_generation'):
+            return jsonify({'error': 'Monthly deck generation limit reached'}), 429
+        
+        # Initialize analyzer
+        analyzer = TextbookAnalyzer()
+        
+        # Step 1: Analyze textbook
+        logger.info("Analyzing textbook...")
+        analysis = analyzer.analyze_textbook(textbook_name)
+        
+        # Step 2: Generate structure
+        logger.info("Generating structure...")
+        structure = analyzer.generate_structure(textbook_name)
+        
+        # Step 3: Create database entries
+        logger.info("Creating database entries...")
+        
+        # Create or get primary subject category
+        primary_subject = analysis.get('primary_subject', 'general')
+        subject_result = supabase.table('subject_categories').select('*').eq('name', primary_subject).execute()
+        
+        if not subject_result.data:
+            # Create new subject category
+            subject_category = SubjectCategories(
+                name=primary_subject,
+                description=f"Primary subject category for {primary_subject}",
+                level=1
+            )
+            subject_result = supabase.table('subject_categories').insert(subject_category.to_dict()).execute()
+            main_subject_id = subject_result.data[0]['id']
+        else:
+            main_subject_id = subject_result.data[0]['id']
+        
+        # Create or get subcategories
+        subcategory_ids = []
+        for subfield in analysis.get('subfields', []):
+            subcategory_result = supabase.table('subject_subcategories').select('*').eq('name', subfield).execute()
+            
+            if not subcategory_result.data:
+                # Create new subcategory
+                subcategory = SubjectSubcategories(
+                    category_id=main_subject_id,
+                    name=subfield,
+                    description=f"Subcategory of {primary_subject}"
+                )
+                subcategory_result = supabase.table('subject_subcategories').insert(subcategory.to_dict()).execute()
+                subcategory_ids.append(subcategory_result.data[0]['id'])
+            else:
+                subcategory_ids.append(subcategory_result.data[0]['id'])
+        
+        # Create deck with subject information
+        logger.info("Creating deck...")
+        deck = Decks(
+            user_id=user_id,
+            title=textbook_name,
+            created_at=datetime.utcnow(),
+            is_active=True,
+            last_modified=datetime.utcnow(),
+            main_subject_id=main_subject_id,
+            subcategory_ids=subcategory_ids
+        )
+        
+        # Insert deck into Supabase
+        deck_result = supabase.table('decks').insert(deck.to_dict()).execute()
+        if not deck_result.data:
+            raise Exception("Failed to create deck")
+        deck_id = deck_result.data[0]['id']
+        
+        all_cards = {}
+        # Create parts, chapters, topics
+        for part_idx, part_data in enumerate(structure['parts']):
+            logger.info(f"Creating part: {part_data['title']}")
+            part = Parts(
+                deck_id=deck_id,
+                title=part_data['title'],
+                order_index=part_idx,
+                is_active=True,
+                last_modified=datetime.utcnow()
+            )
+            
+            # Insert part into Supabase
+            part_result = supabase.table('parts').insert(part.to_dict()).execute()
+            if not part_result.data:
+                raise Exception("Failed to create part")
+            part_id = part_result.data[0]['id']
+
+            for chapter_idx, chapter_data in enumerate(part_data['chapters']):
+                logger.info(f"Creating chapter: {chapter_data['title']}")
+                chapter = Chapters(
+                    part_id=part_id,
+                    title=chapter_data['title'],
+                    order_index=chapter_idx,
+                    is_active=True,
+                    last_modified=datetime.utcnow()
+                )
+                
+                # Insert chapter into Supabase
+                chapter_result = supabase.table('chapters').insert(chapter.to_dict()).execute()
+                if not chapter_result.data:
+                    raise Exception("Failed to create chapter")
+                chapter_id = chapter_result.data[0]['id']
+
+                for topic_idx, topic_data in enumerate(chapter_data['topics']):
+                    logger.info(f"Creating topic: {topic_data['title']}")
+                    topic = Topics(
+                        chapter_id=chapter_id,
+                        title=topic_data['title'],
+                        order_index=topic_idx,
+                        is_active=True,
+                        last_modified=datetime.utcnow()
+                    )
+                    
+                    # Insert topic into Supabase
+                    topic_result = supabase.table('topics').insert(topic.to_dict()).execute()
+                    if not topic_result.data:
+                        raise Exception("Failed to create topic")
+                    topic_id = topic_result.data[0]['id']
+
+                    # Generate cards for this topic
+                    logger.info(f"Generating cards for topic: {topic_data['title']}")
+                    cards = analyzer.generate_cards_for_topic(
+                        topic_data['title'],
+                        topic_data.get('comment', ''),
+                        textbook_name,
+                        topic_data.get('card_count', 3)
+                    )
+                    
+                    # Store cards in database
+                    topic_cards = []
+                    for card_data in cards:
+                        card = Cards(
+                            topic_id=topic_id,
+                            front=card_data['question'],
+                            back=card_data['answer'],
+                            is_active=True,
+                            last_modified=datetime.utcnow()
+                        )
+                        
+                        # Insert card into Supabase
+                        card_result = supabase.table('cards').insert(card.to_dict()).execute()
+                        if not card_result.data:
+                            raise Exception("Failed to create card")
+                            
+                        topic_cards.append({
+                            'front': card.front,
+                            'back': card.back
+                        })
+                    all_cards[str(topic_id)] = topic_cards
+
+        # Update usage count
+        subscription_manager.increment_usage(user_id, 'deck_generation')
+        
+        return jsonify({
+            'message': 'Deck generated successfully',
+            'deck': {
+                'id': str(deck_id),
+                'title': deck.title,
+                'user_id': user_id,
+                'main_subject_id': main_subject_id,
+                'subcategory_ids': subcategory_ids
+            },
+            'analysis': analysis,
+            'structure': structure,
+            'cards': all_cards
+        })
+        
+    except Exception as e:
+        logger.error(f"Error generating deck: {e}")
+        return jsonify({"error": str(e)}), 500
 
 @api.route('/api/generate-textbook-structure', methods=['POST'])
 @requires_auth
@@ -1831,3 +2021,41 @@ def handle_stripe_webhook():
     except Exception as e:
         logger.error(f"Error handling webhook: {e}")
         return jsonify({"error": "Failed to handle webhook"}), 500 
+
+@api.route('/api/decks/by-institution', methods=['GET'])
+@requires_auth
+def get_decks_by_institution():
+    """Get decks filtered by educational institution"""
+    institution_id = request.args.get('institution_id')
+    include_all_institutions = request.args.get('include_all_institutions', 'false').lower() == 'true'
+    
+    try:
+        query = """
+            SELECT DISTINCT d.*
+            FROM decks d
+            JOIN deck_categories dc ON d.id = dc.deck_id
+            JOIN categories c ON dc.category_id = c.id
+            WHERE 1=1
+        """
+        params = {}
+        
+        if institution_id:
+            query += " AND c.id = :institution_id"
+            params['institution_id'] = institution_id
+        elif include_all_institutions:
+            query += " AND (c.id IN (SELECT id FROM categories WHERE parent_id = :edu_inst_id) OR c.parent_id = :edu_inst_id)"
+            params['edu_inst_id'] = '00000000-0000-0000-0000-000000000007'  # Educational Institutions category ID
+            
+        result = supabase.table('decks').select('*').ilike('title', f'%{query}%').execute()
+        decks = result.fetchall()
+        
+        return jsonify([{
+            'id': str(deck.id),
+            'title': deck.title,
+            'created_at': deck.created_at.isoformat() if deck.created_at else None,
+            'user_id': str(deck.user_id) if deck.user_id else None
+        } for deck in decks])
+        
+    except Exception as e:
+        logger.error(f"Error getting decks by institution: {str(e)}")
+        return jsonify({"error": str(e)}), 500

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Typography } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { ThemeProvider } from './lib/ThemeContext';
 import Header from './components/Header';
 import DeckSearch from './components/DeckSearch';
 import Profile from './components/Profile';
@@ -10,6 +11,8 @@ import DeckViewer from './components/DeckViewer';
 import StudyDeck from './components/StudyDeck';
 import AdminDashboard from './components/AdminDashboard';
 import LogoutButton from './components/LogoutButton';
+import LandingPage from './components/LandingPage';
+import CreateDeck from './components/CreateDeck';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -195,12 +198,12 @@ function AppContent() {
       display: 'flex', 
       flexDirection: 'column',
       minHeight: '100vh',
-      bgcolor: '#ffffff'
+      bgcolor: 'background.default'
     }}>
       <Header 
+        onSearch={handleSearch}
         searchQuery={searchQuery}
         setSearchQuery={setSearchQuery}
-        onSearch={handleSearch}
         userInfo={userInfo}
         tokens={tokens}
         onLogout={handleLogout}
@@ -208,33 +211,41 @@ function AppContent() {
       />
       <Box sx={{ flex: 1 }}>
         <Routes>
-          <Route 
-            path="/" 
+          <Route path="/" element={<LandingPage />} />
+          <Route
+            path="/create-deck"
             element={
-              (() => {
-                const accessToken = localStorage.getItem('access_token');
-                console.log('=== App.jsx Debug Info ===');
-                console.log('Current User Info:', userInfo);
-                console.log('Current Tokens:', tokens);
-                console.log('Access Token from localStorage:', accessToken ? accessToken.substring(0, 20) + '...' : 'Not found');
-                console.log('==========================');
-                
-                return (
-                  <DeckSearch 
-                    userInfo={userInfo}
-                    accessToken={accessToken}
-                  />
-                );
-              })()
+              userInfo ? (
+                <Box>
+                  <Header />
+                  <CreateDeck />
+                </Box>
+              ) : (
+                <Navigate to="/login" state={{ from: location }} replace />
+              )
+            }
+          />
+          <Route 
+            path="/dashboard" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <DeckSearch />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
+              )
             } 
           />
           <Route 
             path="/profile" 
             element={
               userInfo ? (
-                <Profile userInfo={userInfo} onLogout={handleLogout} isAdmin={isAdmin} />
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <Profile userInfo={userInfo} />
+                </Box>
               ) : (
-                <Navigate to="/" />
+                <Navigate to="/login" replace />
               )
             } 
           />
@@ -242,71 +253,76 @@ function AppContent() {
             path="/admin" 
             element={
               isAdmin ? (
-                <AdminDashboard />
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <AdminDashboard />
+                </Box>
               ) : (
-                <Navigate to="/profile" />
+                <Navigate to="/dashboard" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/study/:deckId" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <StudyDeck />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
               )
             } 
           />
           <Route 
             path="/deck/:deckId" 
             element={
-              (() => {
-                const deck = location.state?.deck;
-                if (!deck) {
-                  return <Navigate to="/" replace />;
-                }
-                return <DeckHierarchyViewer deck={deck} />;
-              })()
-            } 
-          />
-          <Route 
-            path="/deck/:deckId/view" 
-            element={
-              (() => {
-                const deck = location.state?.deck;
-                if (!deck) {
-                  return <Navigate to="/" replace />;
-                }
-                return <AnkiDeckViewer />;
-              })()
-            } 
-          />
-          <Route 
-            path="/deck/:deckId/cards" 
-            element={
               userInfo ? (
-                <DeckViewer />
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <DeckViewer />
+                </Box>
               ) : (
-                <Navigate to="/" replace state={{ from: location }} />
+                <Navigate to="/login" replace />
               )
             } 
           />
           <Route 
-            path="/deck/:deckId/study" 
+            path="/hierarchy/:deckId" 
             element={
               userInfo ? (
-                <StudyDeck />
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <DeckHierarchyViewer />
+                </Box>
               ) : (
-                <Navigate to="/" replace state={{ from: location }} />
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/anki/:deckId" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <AnkiDeckViewer />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
               )
             } 
           />
         </Routes>
       </Box>
-      <Box sx={{ 
-        mt: 'auto', 
-        pt: 4,
-        pb: 2,
-        borderTop: '1px solid #e0e0e0',
-        textAlign: 'center'
-      }}>
-        <Typography sx={{ 
-          color: '#666666',
-          fontSize: '0.875rem',
-          fontWeight: 300
-        }}>
-          © {new Date().getFullYear()} Magnus Kobbeltvedt Haga. All rights reserved.
+      <Box 
+        component="footer" 
+        sx={{ 
+          py: 2, 
+          px: 3, 
+          textAlign: 'center',
+          borderTop: '1px solid',
+          borderColor: 'divider'
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          © Magnus Kobbeltvedt Haga 2025
         </Typography>
       </Box>
     </Box>
@@ -315,9 +331,11 @@ function AppContent() {
 
 function App() {
   return (
-    <Router>
-      <AppContent />
-    </Router>
+    <ThemeProvider>
+      <Router>
+        <AppContent />
+      </Router>
+    </ThemeProvider>
   );
 }
 
