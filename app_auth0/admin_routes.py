@@ -169,11 +169,11 @@ def requires_admin(f):
     def decorated(*args, **kwargs):
         try:
             # Get token from header
-        auth_header = request.headers.get('Authorization')
+            auth_header = request.headers.get('Authorization')
             if not auth_header or not auth_header.startswith('Bearer '):
                 logger.error("No valid Authorization header")
-            return jsonify({"error": "No authorization header"}), 401
-            
+                return jsonify({"error": "No authorization header"}), 401
+                
             token = auth_header.split(' ')[1]
             logger.info(f"Admin check - Auth header present: True")
             logger.info(f"Admin check - Token format: {token[:20]}...")

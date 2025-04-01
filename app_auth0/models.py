@@ -60,21 +60,21 @@ class ContentSubjectRelationships:
     """
     Model class for content_subject_relationships table.
     """
-    def __init__(self, id=None, content_type=None, content_id=None, subject_id=None, 
+    def __init__(self, id=None, content_type_id=None, content_id=None, subject_id=None, 
                  subject_type=None, relationship_type=None, created_at=None, updated_at=None):
         self.id = id or str(uuid.uuid4())
-        self.content_type = content_type
+        self.content_type_id = content_type_id  # References content_types table
         self.content_id = content_id
         self.subject_id = subject_id
         self.subject_type = subject_type
         self.relationship_type = relationship_type
-        self.created_at = created_at
-        self.updated_at = updated_at
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
 
     def to_dict(self):
         return {
             'id': self.id,
-            'content_type': self.content_type,
+            'content_type_id': self.content_type_id,
             'content_id': self.content_id,
             'subject_id': self.subject_id,
             'subject_type': self.subject_type,
@@ -92,7 +92,7 @@ class Textbooks:
     Model class for textbooks table.
     """
 
-    def __init__(self, id=None, user_id=None, title=None, author=None, subject=None, description=None, file_path=None, uploaded_at=None, is_public=None, tags=None, difficulty_level=None, language=None, total_cards=None, avg_rating=None, num_ratings=None, main_subject_id=None, subcategory_ids=None):
+    def __init__(self, id=None, user_id=None, title=None, author=None, subject=None, description=None, file_path=None, uploaded_at=None, is_public=None, tags=None, difficulty_level=None, language=None, total_cards=None, avg_rating=None, num_ratings=None, main_subject_id=None, subcategory_ids=None, content_type_id=None):
         self.id = id or str(uuid.uuid4())
         self.user_id = user_id
         self.title = title
@@ -110,6 +110,7 @@ class Textbooks:
         self.num_ratings = num_ratings
         self.main_subject_id = main_subject_id
         self.subcategory_ids = subcategory_ids or []
+        self.content_type_id = content_type_id  # References content_types table (default: textbook type)
 
     def to_dict(self):
         return {
@@ -129,7 +130,8 @@ class Textbooks:
             'avg_rating': self.avg_rating,
             'num_ratings': self.num_ratings,
             'main_subject_id': self.main_subject_id,
-            'subcategory_ids': self.subcategory_ids
+            'subcategory_ids': self.subcategory_ids,
+            'content_type_id': self.content_type_id
         }
 
     @classmethod
@@ -191,17 +193,20 @@ class Decks:
     Model class for decks table.
     """
 
-    def __init__(self, id=None, user_id=None, title=None, created_at=None, is_active=None, last_modified=None, modified_by=None, main_subject_id=None, subcategory_ids=None, source_textbook_id=None):
+    def __init__(self, id=None, user_id=None, title=None, created_at=None, is_active=None, 
+                 last_modified=None, modified_by=None, main_subject_id=None, subcategory_ids=None, 
+                 source_textbook_id=None, content_type_id=None):
         self.id = id or str(uuid.uuid4())
         self.user_id = user_id
         self.title = title
-        self.created_at = created_at
+        self.created_at = created_at or datetime.utcnow()
         self.is_active = is_active if is_active is not None else True
         self.last_modified = last_modified or datetime.utcnow()
         self.modified_by = modified_by
         self.main_subject_id = main_subject_id
         self.subcategory_ids = subcategory_ids or []
         self.source_textbook_id = source_textbook_id
+        self.content_type_id = content_type_id  # References content_types table (default: deck type)
 
     def to_dict(self):
         return {
@@ -214,7 +219,8 @@ class Decks:
             'modified_by': self.modified_by,
             'main_subject_id': self.main_subject_id,
             'subcategory_ids': self.subcategory_ids,
-            'source_textbook_id': self.source_textbook_id
+            'source_textbook_id': self.source_textbook_id,
+            'content_type_id': self.content_type_id
         }
 
     @classmethod
@@ -623,19 +629,21 @@ class CourseMaterials:
     Model class for course_materials table.
     """
 
-    def __init__(self, id=None, user_id=None, title=None, description=None, material_type=None, file_path=None, file_size=None, mime_type=None, tags=None, metadata=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, user_id=None, title=None, description=None, content_type_id=None, 
+                 file_path=None, file_size=None, mime_type=None, tags=None, metadata=None, 
+                 created_at=None, updated_at=None):
         self.id = id or str(uuid.uuid4())
         self.user_id = user_id
         self.title = title
         self.description = description
-        self.material_type = material_type
+        self.content_type_id = content_type_id  # References content_types table
         self.file_path = file_path
         self.file_size = file_size
         self.mime_type = mime_type
         self.tags = tags
         self.metadata = metadata
-        self.created_at = created_at
-        self.updated_at = updated_at
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
 
     def to_dict(self):
         return {
@@ -643,14 +651,14 @@ class CourseMaterials:
             'user_id': self.user_id,
             'title': self.title,
             'description': self.description,
-            'material_type': self.material_type,
+            'content_type_id': self.content_type_id,
             'file_path': self.file_path,
             'file_size': self.file_size,
             'mime_type': self.mime_type,
             'tags': self.tags,
             'metadata': self.metadata,
             'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'updated_at': self.updated_at
         }
 
     @classmethod
@@ -662,17 +670,18 @@ class StudyResources:
     Model class for study_resources table.
     """
 
-    def __init__(self, id=None, user_id=None, title=None, content=None, resource_type=None, source_material_id=None, tags=None, metadata=None, created_at=None, updated_at=None):
+    def __init__(self, id=None, user_id=None, title=None, content=None, content_type_id=None, 
+                 source_material_id=None, tags=None, metadata=None, created_at=None, updated_at=None):
         self.id = id or str(uuid.uuid4())
         self.user_id = user_id
         self.title = title
         self.content = content
-        self.resource_type = resource_type
+        self.content_type_id = content_type_id  # References content_types table
         self.source_material_id = source_material_id
         self.tags = tags
         self.metadata = metadata
-        self.created_at = created_at
-        self.updated_at = updated_at
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
 
     def to_dict(self):
         return {
@@ -680,12 +689,12 @@ class StudyResources:
             'user_id': self.user_id,
             'title': self.title,
             'content': self.content,
-            'resource_type': self.resource_type,
+            'content_type_id': self.content_type_id,
             'source_material_id': self.source_material_id,
             'tags': self.tags,
             'metadata': self.metadata,
             'created_at': self.created_at,
-            'updated_at': self.updated_at,
+            'updated_at': self.updated_at
         }
 
     @classmethod
@@ -1134,33 +1143,163 @@ class DeckExports:
     def from_dict(cls, data):
         return cls(**data)
 
+class ContentRatings:
+    """
+    Model class for content_ratings table.
+    Handles ratings for various types of content (decks, notes, courses, etc.).
+    """
+    def __init__(self, id=None, user_id=None, content_type_id=None, content_id=None, 
+                 rating=None, review_text=None, helpful_count=None, created_at=None, 
+                 updated_at=None, is_verified=None, institution_id=None, department_id=None):
+        self.id = id or str(uuid.uuid4())
+        self.user_id = user_id
+        self.content_type_id = content_type_id  # References content_types table
+        self.content_id = content_id
+        self.rating = rating  # 1-5 scale
+        self.review_text = review_text
+        self.helpful_count = helpful_count or 0
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+        self.is_verified = is_verified if is_verified is not None else False
+        self.institution_id = institution_id
+        self.department_id = department_id
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'content_type_id': self.content_type_id,
+            'content_id': self.content_id,
+            'rating': self.rating,
+            'review_text': self.review_text,
+            'helpful_count': self.helpful_count,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at,
+            'is_verified': self.is_verified,
+            'institution_id': self.institution_id,
+            'department_id': self.department_id
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class RatingCategories:
+    """
+    Model class for rating_categories table.
+    Defines different aspects that can be rated for different content types.
+    """
+    def __init__(self, id=None, name=None, description=None, content_type_id=None, 
+                 is_active=None, created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.name = name  # e.g., 'Clarity', 'Accuracy', 'Usefulness'
+        self.description = description
+        self.content_type_id = content_type_id  # References content_types table
+        self.is_active = is_active if is_active is not None else True
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'content_type_id': self.content_type_id,
+            'is_active': self.is_active,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class ContentTypes:
+    """
+    Model class for content_types table.
+    Defines the different types of content that can be rated.
+    """
+    def __init__(self, id=None, name=None, description=None, icon=None, 
+                 is_active=None, created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.name = name  # e.g., 'deck', 'note', 'course'
+        self.description = description
+        self.icon = icon
+        self.is_active = is_active if is_active is not None else True
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'icon': self.icon,
+            'is_active': self.is_active,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class ContentTypeRelationships:
+    """
+    Model class for content_type_relationships table.
+    Defines relationships between different content types.
+    """
+    def __init__(self, id=None, parent_type_id=None, child_type_id=None, 
+                 relationship_type=None, created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.parent_type_id = parent_type_id  # References content_types table
+        self.child_type_id = child_type_id    # References content_types table
+        self.relationship_type = relationship_type  # e.g., 'contains', 'derived_from'
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'parent_type_id': self.parent_type_id,
+            'child_type_id': self.child_type_id,
+            'relationship_type': self.relationship_type,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
 class ContentReports:
     """
     Model class for content_reports table.
     """
 
-    def __init__(self, id=None, reporter_id=None, content_type=None, content_id=None, reason=None, description=None, status=None, created_at=None, resolved_at=None):
+    def __init__(self, id=None, reporter_id=None, content_type_id=None, content_id=None, 
+                 reason=None, description=None, status=None, created_at=None, resolved_at=None):
         self.id = id or str(uuid.uuid4())
         self.reporter_id = reporter_id
-        self.content_type = content_type
+        self.content_type_id = content_type_id  # References content_types table
         self.content_id = content_id
         self.reason = reason
         self.description = description
         self.status = status
-        self.created_at = created_at
+        self.created_at = created_at or datetime.utcnow()
         self.resolved_at = resolved_at
 
     def to_dict(self):
         return {
             'id': self.id,
             'reporter_id': self.reporter_id,
-            'content_type': self.content_type,
+            'content_type_id': self.content_type_id,
             'content_id': self.content_id,
             'reason': self.reason,
             'description': self.description,
             'status': self.status,
             'created_at': self.created_at,
-            'resolved_at': self.resolved_at,
+            'resolved_at': self.resolved_at
         }
 
     @classmethod
@@ -1287,6 +1426,135 @@ class SubscriptionUsage:
             'last_used_at': self.last_used_at,
             'created_at': self.created_at,
             'updated_at': self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class EducationalInstitutions:
+    """
+    Model class for educational_institutions table.
+    Represents schools, universities, and other educational institutions.
+    """
+    def __init__(self, id=None, name=None, type=None, country=None, city=None, 
+                 website=None, description=None, created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.name = name
+        self.type = type  # e.g., 'university', 'high_school', 'college'
+        self.country = country
+        self.city = city
+        self.website = website
+        self.description = description
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'type': self.type,
+            'country': self.country,
+            'city': self.city,
+            'website': self.website,
+            'description': self.description,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class InstitutionDepartments:
+    """
+    Model class for institution_departments table.
+    Represents departments or faculties within educational institutions.
+    """
+    def __init__(self, id=None, institution_id=None, name=None, description=None, 
+                 created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.institution_id = institution_id
+        self.name = name
+        self.description = description
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'institution_id': self.institution_id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class UserInstitutionAffiliations:
+    """
+    Model class for user_institution_affiliations table.
+    Tracks user affiliations with educational institutions.
+    """
+    def __init__(self, id=None, user_id=None, institution_id=None, department_id=None,
+                 role=None, start_date=None, end_date=None, is_active=None, 
+                 created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.user_id = user_id
+        self.institution_id = institution_id
+        self.department_id = department_id
+        self.role = role  # e.g., 'student', 'faculty', 'staff'
+        self.start_date = start_date
+        self.end_date = end_date
+        self.is_active = is_active if is_active is not None else True
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'institution_id': self.institution_id,
+            'department_id': self.department_id,
+            'role': self.role,
+            'start_date': self.start_date,
+            'end_date': self.end_date,
+            'is_active': self.is_active,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
+        }
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+class DeckInstitutionAssociations:
+    """
+    Model class for deck_institution_associations table.
+    Associates decks with specific institutions and departments.
+    """
+    def __init__(self, id=None, deck_id=None, institution_id=None, department_id=None,
+                 association_type=None, created_at=None, updated_at=None):
+        self.id = id or str(uuid.uuid4())
+        self.deck_id = deck_id
+        self.institution_id = institution_id
+        self.department_id = department_id
+        self.association_type = association_type  # e.g., 'official', 'community'
+        self.created_at = created_at or datetime.utcnow()
+        self.updated_at = updated_at or datetime.utcnow()
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'deck_id': self.deck_id,
+            'institution_id': self.institution_id,
+            'department_id': self.department_id,
+            'association_type': self.association_type,
+            'created_at': self.created_at,
+            'updated_at': self.updated_at
         }
 
     @classmethod

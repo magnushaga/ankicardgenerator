@@ -32,7 +32,7 @@ def create_category_tables():
                     parent_id UUID REFERENCES categories(id) ON DELETE CASCADE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    created_by UUID REFERENCES users(id),
+                    created_by VARCHAR(255) REFERENCES users(id),
                     is_active BOOLEAN DEFAULT true,
                     UNIQUE(name, parent_id)
                 )
@@ -44,7 +44,7 @@ def create_category_tables():
                     deck_id UUID REFERENCES decks(id) ON DELETE CASCADE,
                     category_id UUID REFERENCES categories(id) ON DELETE CASCADE,
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    created_by UUID REFERENCES users(id),
+                    created_by VARCHAR(255) REFERENCES users(id),
                     UNIQUE(deck_id, category_id)
                 )
                 """
@@ -91,7 +91,9 @@ def create_category_tables():
                     ('00000000-0000-0000-0000-000000000003', 'Calculus', 'Study of continuous change', '00000000-0000-0000-0000-000000000001', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true),
                     ('00000000-0000-0000-0000-000000000004', 'Economics', 'Study of production, distribution, and consumption of goods and services', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true),
                     ('00000000-0000-0000-0000-000000000005', 'Microeconomics', 'Study of individual markets and decision-making', '00000000-0000-0000-0000-000000000004', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true),
-                    ('00000000-0000-0000-0000-000000000006', 'Macroeconomics', 'Study of the economy as a whole', '00000000-0000-0000-0000-000000000004', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true)
+                    ('00000000-0000-0000-0000-000000000006', 'Macroeconomics', 'Study of the economy as a whole', '00000000-0000-0000-0000-000000000004', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true),
+                    ('00000000-0000-0000-0000-000000000007', 'Educational Institutions', 'Universities and educational organizations', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true),
+                    ('00000000-0000-0000-0000-000000000008', 'Norwegian School of Economics', 'NHH - Norwegian School of Economics', '00000000-0000-0000-0000-000000000007', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL, true)
                 ON CONFLICT (id) DO NOTHING;
                 """
             ]

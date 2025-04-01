@@ -41,6 +41,7 @@ class Permission(Enum):
     DELETE = 'delete'
     SHARE = 'share'
     ADMIN = 'admin'
+    CREATE = 'create'
     CREATE_LIVE_DECK = 'create_live_deck'
     EDIT_LIVE_DECK = 'edit_live_deck'
     USE_AI_FEATURES = 'use_ai_features'
@@ -193,28 +194,32 @@ def has_permission(user_id: str, resource_type: ResourceType, resource_id: str, 
                 Permission.WRITE: True,
                 Permission.DELETE: True,
                 Permission.SHARE: True,
-                Permission.ADMIN: True
+                Permission.ADMIN: True,
+                Permission.CREATE: True
             },
             Role.EDITOR: {
                 Permission.READ: True,
                 Permission.WRITE: True,
                 Permission.DELETE: False,
                 Permission.SHARE: True,
-                Permission.ADMIN: False
+                Permission.ADMIN: False,
+                Permission.CREATE: True
             },
             Role.VIEWER: {
                 Permission.READ: True,
                 Permission.WRITE: False,
                 Permission.DELETE: False,
                 Permission.SHARE: False,
-                Permission.ADMIN: False
+                Permission.ADMIN: False,
+                Permission.CREATE: False
             },
             Role.ADMIN: {
                 Permission.READ: True,
                 Permission.WRITE: True,
                 Permission.DELETE: True,
                 Permission.SHARE: True,
-                Permission.ADMIN: True
+                Permission.ADMIN: True,
+                Permission.CREATE: True
             }
         }
 
