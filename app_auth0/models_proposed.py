@@ -164,6 +164,10 @@ class Courses(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
     prerequisites = Column(ARRAY(UUID(as_uuid=True)))  # Array of course IDs
+    # New fields for conversion tracking
+    converted_from = Column(UUID(as_uuid=True))  # ID of the live content this was converted from
+    conversion_date = Column(DateTime)  # When the conversion happened
+    conversion_metadata = Column(JSONB)  # Additional conversion details
 
 class CourseEnrollments(Base):
     """Model class for course_enrollments table - Manages student enrollments and access."""
@@ -271,9 +275,19 @@ class LiveCourseContent(Base):
     is_active = Column(Boolean, default=True)
     active_modules = Column(Integer, default=0)
     active_sections = Column(Integer, default=0)
+    version = Column(Integer, default=1)
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'))
+    progress = Column(Float, default=0)
+    last_studied = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+
+    # Relationships
+    parent_version = relationship('LiveCourseContent', remote_side=[id], backref='child_versions')
+    modules = relationship('LiveCourseModules', back_populates='live_content', lazy=True)
+    notes = relationship('LiveNotes', back_populates='course_content', lazy=True)
+    decks = relationship('LiveDecks', back_populates='course_content', lazy=True)
 
 class LiveCourseModules(Base):
     """Model class for live_course_modules table - Active modules for course study."""
@@ -282,6 +296,9 @@ class LiveCourseModules(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     live_content_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'), nullable=False)
     module_id = Column(UUID(as_uuid=True), ForeignKey('course_modules.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
     is_active = Column(Boolean, default=True)
     progress = Column(Float, default=0)
     last_studied = Column(DateTime)
@@ -296,6 +313,9 @@ class LiveCourseSections(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     live_module_id = Column(UUID(as_uuid=True), ForeignKey('live_course_modules.id'), nullable=False)
     section_id = Column(UUID(as_uuid=True), ForeignKey('course_sections.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
     is_active = Column(Boolean, default=True)
     progress = Column(Float, default=0)
     last_studied = Column(DateTime)
@@ -458,6 +478,10 @@ class TextbookContent(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+    # New fields for conversion tracking
+    converted_from = Column(UUID(as_uuid=True))  # ID of the live content this was converted from
+    conversion_date = Column(DateTime)  # When the conversion happened
+    conversion_metadata = Column(JSONB)  # Additional conversion details
 
 class TextbookParts(Base):
     """Model class for textbook_parts table - Top-level textbook organization."""
@@ -503,6 +527,7 @@ class TextbookTopics(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+    live_notes = relationship('LiveNotes', back_populates='topic', lazy=True)
 
 class ContentMigrationMappings(Base):
     """Model class for content_migration_mappings table - Detailed migration tracking."""
@@ -534,9 +559,21 @@ class LiveTextbookContent(Base):
     active_parts = Column(Integer, default=0)
     active_chapters = Column(Integer, default=0)
     active_topics = Column(Integer, default=0)
+    version = Column(Integer, default=1)
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'))
+    progress = Column(Float, default=0)
+    last_studied = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+
+    # Relationships
+    parent_version = relationship('LiveTextbookContent', remote_side=[id], backref='child_versions')
+    parts = relationship('LiveTextbookParts', back_populates='live_content', lazy=True)
+    chapters = relationship('LiveTextbookChapters', back_populates='live_content', lazy=True)
+    topics = relationship('LiveTextbookTopics', back_populates='live_content', lazy=True)
+    notes = relationship('LiveNotes', back_populates='textbook_content', lazy=True)
+    decks = relationship('LiveDecks', back_populates='textbook_content', lazy=True)
 
 class LiveTextbookParts(Base):
     """Model class for live_textbook_parts table - Active parts for textbook study."""
@@ -545,6 +582,9 @@ class LiveTextbookParts(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     live_content_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'), nullable=False)
     part_id = Column(UUID(as_uuid=True), ForeignKey('textbook_parts.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
     is_active = Column(Boolean, default=True)
     progress = Column(Float, default=0)
     last_studied = Column(DateTime)
@@ -559,6 +599,9 @@ class LiveTextbookChapters(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     live_part_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_parts.id'), nullable=False)
     chapter_id = Column(UUID(as_uuid=True), ForeignKey('textbook_chapters.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
     is_active = Column(Boolean, default=True)
     progress = Column(Float, default=0)
     last_studied = Column(DateTime)
@@ -573,6 +616,9 @@ class LiveTextbookTopics(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     live_chapter_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_chapters.id'), nullable=False)
     topic_id = Column(UUID(as_uuid=True), ForeignKey('textbook_topics.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
     is_active = Column(Boolean, default=True)
     progress = Column(Float, default=0)
     last_studied = Column(DateTime)
@@ -612,6 +658,13 @@ class PersonalizedTextbooks(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationships
+    user = relationship('Users', back_populates='personalized_textbooks')
+    original_textbook = relationship('TextbookContent', back_populates='personalized_versions')
+    parts = relationship('PersonalizedParts', back_populates='personalized_textbook', lazy=True)
+    customizations = relationship('ContentCustomizations', back_populates='personalized_textbook', lazy=True)
+    shared_versions = relationship('SharedCustomizations', back_populates='personalized_textbook', lazy=True)
+
 class PersonalizedParts(Base):
     """Model class for personalized_parts table - Customized textbook parts."""
     __tablename__ = 'personalized_parts'
@@ -627,6 +680,11 @@ class PersonalizedParts(Base):
     custom_metadata = Column(JSONB)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    personalized_textbook = relationship('PersonalizedTextbooks', back_populates='parts')
+    original_part = relationship('TextbookParts', back_populates='personalized_versions')
+    chapters = relationship('PersonalizedChapters', back_populates='part', lazy=True)
 
 class PersonalizedChapters(Base):
     """Model class for personalized_chapters table - Customized textbook chapters."""
@@ -644,6 +702,11 @@ class PersonalizedChapters(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    # Relationships
+    part = relationship('PersonalizedParts', back_populates='chapters')
+    original_chapter = relationship('TextbookChapters', back_populates='personalized_versions')
+    topics = relationship('PersonalizedTopics', back_populates='chapter', lazy=True)
+
 class PersonalizedTopics(Base):
     """Model class for personalized_topics table - Customized textbook topics."""
     __tablename__ = 'personalized_topics'
@@ -659,6 +722,10 @@ class PersonalizedTopics(Base):
     custom_metadata = Column(JSONB)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    chapter = relationship('PersonalizedChapters', back_populates='topics')
+    original_topic = relationship('TextbookTopics', back_populates='personalized_versions')
 
 class ContentCustomizations(Base):
     """Model class for content_customizations table - Tracks changes to content structure."""
@@ -692,6 +759,11 @@ class SharedCustomizations(Base):
     expires_at = Column(DateTime)
     metadata = Column(JSONB)
 
+    # Relationships
+    personalized_textbook = relationship('PersonalizedTextbooks', back_populates='shared_versions')
+    sharer = relationship('Users', foreign_keys=[shared_by])
+    recipient = relationship('Users', foreign_keys=[shared_with])
+
 class CustomizationComments(Base):
     """Model class for customization_comments table - Allows discussions on content changes."""
     __tablename__ = 'customization_comments'
@@ -706,24 +778,26 @@ class CustomizationComments(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 class Decks(Base):
-    """Model class for decks table."""
+    """Model class for decks table - Collection of flashcards."""
     __tablename__ = 'decks'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     title = Column(String(255), nullable=False)
     description = Column(Text)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    is_active = Column(Boolean, default=True)
-    last_modified = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    modified_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    is_public = Column(Boolean, default=False)
+    difficulty_level = Column(Integer)
+    language = Column(String(50))
     main_subject_id = Column(UUID(as_uuid=True), ForeignKey('subject_categories.id'))
     subcategory_ids = Column(ARRAY(UUID(as_uuid=True)))
-    source_textbook_id = Column(UUID(as_uuid=True), ForeignKey('textbook_content.id'))
-    content_type_id = Column(UUID(as_uuid=True))  # References content_types table
     total_cards = Column(Integer, default=0)
-    is_public = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+    # New fields for conversion tracking
+    converted_from = Column(UUID(as_uuid=True))  # ID of the live content this was converted from
+    conversion_date = Column(DateTime)  # When the conversion happened
+    conversion_metadata = Column(JSONB)  # Additional conversion details
 
 class DeckShares(Base):
     """Model class for deck_shares table."""
@@ -897,6 +971,280 @@ class ContentGenerationQueue(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     metadata = Column(JSONB)
+
+class AdminRoles(Base):
+    """Model class for admin_roles table - Defines administrative roles."""
+    __tablename__ = 'admin_roles'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    permissions = Column(JSONB)  # Detailed permission settings
+    is_system = Column(Boolean, default=False)  # System roles cannot be modified
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AdminPermissions(Base):
+    """Model class for admin_permissions table - Defines granular permissions."""
+    __tablename__ = 'admin_permissions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    category = Column(String(50))  # content, user, system, etc.
+    is_system = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class UserAdminRoles(Base):
+    """Model class for user_admin_roles table - Assigns admin roles to users."""
+    __tablename__ = 'user_admin_roles'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey('admin_roles.id'), nullable=False)
+    assigned_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    valid_from = Column(DateTime, default=datetime.utcnow)
+    valid_until = Column(DateTime)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class AdminAuditLogs(Base):
+    """Model class for admin_audit_logs table - Tracks administrative actions."""
+    __tablename__ = 'admin_audit_logs'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    admin_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    action = Column(String(255), nullable=False)
+    resource_type = Column(String(50))  # user, content, course, etc.
+    resource_id = Column(UUID(as_uuid=True))
+    details = Column(JSONB)
+    ip_address = Column(String(45))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class LiveDecks(Base):
+    """Model class for live_decks table - Active study decks with version control."""
+    __tablename__ = 'live_decks'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    deck_id = Column(UUID(as_uuid=True), ForeignKey('decks.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_active = Column(Boolean, default=True)
+    version = Column(Integer, default=1)
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey('live_decks.id'))
+    active_cards = Column(Integer, default=0)
+    total_cards = Column(Integer, default=0)
+    is_public = Column(Boolean, default=False)
+    progress = Column(Float, default=0)
+    last_studied = Column(DateTime)
+    difficulty_level = Column(Integer)
+    language = Column(String(50))
+    main_subject_id = Column(UUID(as_uuid=True), ForeignKey('subject_categories.id'))
+    subcategory_ids = Column(ARRAY(UUID(as_uuid=True)))
+    metadata = Column(JSONB)
+
+    # Relationships
+    parent_version = relationship('LiveDecks', remote_side=[id], backref='child_versions')
+    card_states = relationship('UserCardState', back_populates='live_deck', lazy=True)
+    notes = relationship('LiveDeckNotes', back_populates='live_deck', lazy=True)
+    course_content = relationship('LiveCourseContent', back_populates='decks', lazy=True)
+    textbook_content = relationship('LiveTextbookContent', back_populates='decks', lazy=True)
+
+class LiveNotes(Base):
+    """Model class for live_notes table - Active study notes with version control."""
+    __tablename__ = 'live_notes'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    topic_id = Column(UUID(as_uuid=True), ForeignKey('textbook_topics.id'))
+    title = Column(String(255), nullable=False)
+    content = Column(Text)
+    format = Column(String(50), default='markdown')
+    tags = Column(ARRAY(String))
+    is_public = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    version = Column(Integer, default=1)
+    parent_version_id = Column(UUID(as_uuid=True), ForeignKey('live_notes.id'))
+    progress = Column(Float, default=0)
+    last_studied = Column(DateTime)
+    difficulty_level = Column(Integer)
+    language = Column(String(50))
+    main_subject_id = Column(UUID(as_uuid=True), ForeignKey('subject_categories.id'))
+    subcategory_ids = Column(ARRAY(UUID(as_uuid=True)))
+    total_cards = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    metadata = Column(JSONB)
+
+    # Relationships
+    parent_version = relationship('LiveNotes', remote_side=[id], backref='child_versions')
+    versions = relationship('LiveNoteVersions', back_populates='note', lazy=True)
+    collaborators = relationship('NoteCollaborators', back_populates='note', lazy=True)
+    deck_links = relationship('LiveDeckNotes', back_populates='note', lazy=True)
+    course_content = relationship('LiveCourseContent', back_populates='notes', lazy=True)
+    textbook_content = relationship('LiveTextbookContent', back_populates='notes', lazy=True)
+    topic = relationship('TextbookTopics', back_populates='live_notes')
+
+class LiveDeckNotes(Base):
+    """Model class for live_deck_notes table - Links notes to live decks."""
+    __tablename__ = 'live_deck_notes'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    live_deck_id = Column(UUID(as_uuid=True), ForeignKey('live_decks.id'), nullable=False)
+    note_id = Column(UUID(as_uuid=True), ForeignKey('live_notes.id'), nullable=False)
+    order_index = Column(Integer)
+    is_active = Column(Boolean, default=True)
+    difficulty_level = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    metadata = Column(JSONB)
+
+    # Relationships
+    live_deck = relationship('LiveDecks', back_populates='notes')
+    note = relationship('LiveNotes', back_populates='deck_links')
+
+class NoteCollaborators(Base):
+    """Model class for note_collaborators table - Manages note sharing and collaboration."""
+    __tablename__ = 'note_collaborators'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    note_id = Column(UUID(as_uuid=True), ForeignKey('live_notes.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    permission_level = Column(String(50))  # view, edit, manage
+    invited_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime)
+    permissions = Column(JSONB)  # Granular permissions
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    note = relationship('LiveNotes', back_populates='collaborators')
+    user = relationship('Users', foreign_keys=[user_id])
+    inviter = relationship('Users', foreign_keys=[invited_by])
+
+class DeckCollaborations(Base):
+    """Model class for deck_collaborations table - Manages deck sharing and collaboration."""
+    __tablename__ = 'deck_collaborations'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    live_deck_id = Column(UUID(as_uuid=True), ForeignKey('live_decks.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    role = Column(String(50))  # viewer, editor, manager
+    invited_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    is_active = Column(Boolean, default=True)
+    expires_at = Column(DateTime)
+    permissions = Column(JSONB)  # Granular permissions
+    can_edit = Column(Boolean, default=False)
+    can_share = Column(Boolean, default=False)
+    can_delete = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    live_deck = relationship('LiveDecks', back_populates='collaborators')
+    user = relationship('Users', foreign_keys=[user_id])
+    inviter = relationship('Users', foreign_keys=[invited_by])
+
+class SemesterPlans(Base):
+    """Model class for semester_plans table - Organizes course content by semester."""
+    __tablename__ = 'semester_plans'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    title = Column(String(255), nullable=False)  # e.g., "Spring 2024"
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    institution_id = Column(UUID(as_uuid=True), ForeignKey('educational_institutions.id'))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    metadata = Column(JSONB)  # For additional semester-specific settings
+
+class SemesterCourses(Base):
+    """Model class for semester_courses table - Links courses to semesters."""
+    __tablename__ = 'semester_courses'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    semester_id = Column(UUID(as_uuid=True), ForeignKey('semester_plans.id'), nullable=False)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    schedule_data = Column(JSONB)  # Class schedule, office hours, etc.
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class WeeklyPlans(Base):
+    """Model class for weekly_plans table - Organizes content by week."""
+    __tablename__ = 'weekly_plans'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    semester_id = Column(UUID(as_uuid=True), ForeignKey('semester_plans.id'), nullable=False)
+    week_number = Column(Integer, nullable=False)
+    start_date = Column(Date, nullable=False)
+    end_date = Column(Date, nullable=False)
+    description = Column(Text)
+    learning_objectives = Column(ARRAY(String))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class WeeklyContent(Base):
+    """Model class for weekly_content table - Links content to specific weeks."""
+    __tablename__ = 'weekly_content'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    week_id = Column(UUID(as_uuid=True), ForeignKey('weekly_plans.id'), nullable=False)
+    content_type = Column(String(50))  # 'lecture', 'reading', 'assignment', 'exam'
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    due_date = Column(DateTime)
+    order_index = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class StudyMaterials(Base):
+    """Model class for study_materials table - Stores various types of study content."""
+    __tablename__ = 'study_materials'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    content_type = Column(String(50))  # 'notes', 'summary', 'practice_questions', 'flashcards'
+    title = Column(String(255), nullable=False)
+    content = Column(Text)
+    file_path = Column(String(1024))
+    created_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    is_public = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    metadata = Column(JSONB)
+
+class StudyMaterialOrganization(Base):
+    """Model class for study_material_organization table - Custom organization of study materials."""
+    __tablename__ = 'study_material_organization'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('study_material_organization.id'))
+    title = Column(String(255))
+    organization_type = Column(String(50))  # 'folder', 'collection', 'topic'
+    order_index = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class StudyMaterialItems(Base):
+    """Model class for study_material_items table - Links content to organization structure."""
+    __tablename__ = 'study_material_items'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    organization_id = Column(UUID(as_uuid=True), ForeignKey('study_material_organization.id'), nullable=False)
+    content_type = Column(String(50))  # 'upload', 'ai_generated', 'note', 'deck'
+    content_id = Column(UUID(as_uuid=True))
+    order_index = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 def init_db(engine):
     """Initialize database tables."""
