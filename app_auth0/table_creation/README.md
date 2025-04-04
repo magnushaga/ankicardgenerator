@@ -1,69 +1,99 @@
-# Table Creation Scripts
+# Database Table Creation Scripts
 
-This directory contains scripts for creating and managing database tables.
+This directory contains scripts for creating the database tables in Supabase PostgreSQL for the application.
 
 ## Directory Structure
 
-- `core/`: Core database creation and schema management scripts
-  - create_all_tables.py
-  - sync_schemas.py
-  - schema_parser.py
-  - recreate_database.py
+```
+table_creation/
+├── core/
+│   └── create_tables.py     # Core table creation logic
+├── run_migrations.py        # Main script to run all migrations
+└── README.md               # This file
+```
 
-- `subjects/`: Subject-related table creation scripts
-  - create_subject_dimensions_fact.py
-  - create_category_tables.py
+## Prerequisites
 
-- `decks/`: Deck-related table creation scripts
-  - create_live_deck_tables.py
+- Python 3.7+
+- SQLAlchemy
+- psycopg2-binary
 
-- `admin/`: Admin-related table creation scripts
-  - create_admin_tables.py
-  - assign_admin_role.py
-  - drop_admin_tables.py
+## Installation
 
-- `subscriptions/`: Subscription-related table creation scripts
-  - create_subscription_tables.py
-
-- `utils/`: Utility scripts for database management
-  - backup_schema.py
-  - apply_migration.py
-  - drop_missing_tables.py
-
-- `backups/`: Database backup files
+1. Install required packages:
+```bash
+pip install sqlalchemy psycopg2-binary
+```
 
 ## Usage
 
-1. Core setup:
+To create all database tables:
+
+1. Navigate to the table_creation directory:
    ```bash
-   python core/create_all_tables.py
-   python core/sync_schemas.py
+cd app_auth0/table_creation
    ```
 
-2. Subject tables:
+2. Run the migration script:
    ```bash
-   python subjects/create_subject_dimensions_fact.py
-   python subjects/create_category_tables.py
-   ```
+python run_migrations.py
+```
 
-3. Deck tables:
-   ```bash
-   python decks/create_live_deck_tables.py
-   ```
+## Tables Created
 
-4. Admin setup:
-   ```bash
-   python admin/create_admin_tables.py
-   python admin/assign_admin_role.py
-   ```
+The script will create all tables defined in `models_proposed_dynamic.py`, including:
 
-5. Subscription setup:
-   ```bash
-   python subscriptions/create_subscription_tables.py
-   ```
+- Core Tables:
+  - users
+  - admin_roles
+  - admin_permissions
+  - admin_role_permissions
+  - user_admin_roles
+  - admin_audit_logs
 
-## Utilities
+- Content Tables:
+  - courses
+  - course_content
+  - content_chapters
+  - content_sections
+  - study_materials
+  - exam_content
 
-- Backup database: `python utils/backup_schema.py`
-- Apply migrations: `python utils/apply_migration.py`
-- Drop missing tables: `python utils/drop_missing_tables.py`
+- Study Organization:
+  - semester_plans
+  - semester_courses
+  - weekly_plans
+  - weekly_content
+
+- User Content:
+  - user_uploads
+  - content_mappings
+  - ai_generated_content
+  - study_material_organization
+  - study_material_items
+
+- And many more...
+
+## Error Handling
+
+The scripts include comprehensive error handling and will:
+- Report specific database errors
+- Handle connection issues
+- Provide clear error messages
+- Roll back failed operations
+
+## Troubleshooting
+
+If you encounter errors:
+
+1. Check your database connection string
+2. Ensure you have the necessary permissions
+3. Verify that no tables with conflicting names exist
+4. Check the error message for specific issues
+
+## Security Note
+
+The connection string in the scripts includes the database password. In a production environment, you should:
+1. Use environment variables for sensitive information
+2. Never commit credentials to version control
+3. Use appropriate access controls and roles
