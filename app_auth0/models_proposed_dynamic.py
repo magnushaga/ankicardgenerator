@@ -13,7 +13,7 @@ class AdminRoles(Base):
     __tablename__ = 'admin_roles'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
+    name = Column(String(50), nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -23,7 +23,7 @@ class AdminPermissions(Base):
     __tablename__ = 'admin_permissions'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    name = Column(String(255), nullable=False)
+    name = Column(String(50), nullable=False)
     description = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -32,18 +32,16 @@ class AdminRolePermissions(Base):
     """Model class for admin_role_permissions table."""
     __tablename__ = 'admin_role_permissions'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    role_id = Column(UUID(as_uuid=True), ForeignKey('admin_roles.id'), nullable=False)
-    permission_id = Column(UUID(as_uuid=True), ForeignKey('admin_permissions.id'), nullable=False)
+    role_id = Column(UUID(as_uuid=True), ForeignKey('admin_roles.id'), primary_key=True)
+    permission_id = Column(UUID(as_uuid=True), ForeignKey('admin_permissions.id'), primary_key=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
 class UserAdminRoles(Base):
     """Model class for user_admin_roles table."""
     __tablename__ = 'user_admin_roles'
 
-    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
-    role_id = Column(UUID(as_uuid=True), ForeignKey('admin_roles.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), primary_key=True)
+    role_id = Column(UUID(as_uuid=True), ForeignKey('admin_roles.id'), primary_key=True)
     assigned_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -54,8 +52,8 @@ class AdminAuditLogs(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     admin_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
-    action = Column(String(255), nullable=False)
-    resource_type = Column(String(255))
+    action = Column(String(100), nullable=False)
+    resource_type = Column(String(50))
     resource_id = Column(UUID(as_uuid=True))
     details = Column(JSONB)
     ip_address = Column(String(45))
@@ -404,27 +402,25 @@ class LiveCourseSections(Base):
     meta_data = Column(JSONB)
 
 class CourseFiles(Base):
-    """Model class for course_files table - Manages uploaded course materials."""
+    """Model class for course_files table - Files associated with courses."""
     __tablename__ = 'course_files'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
-    module_id = Column(UUID(as_uuid=True), ForeignKey('course_modules.id'))
-    content_id = Column(UUID(as_uuid=True), ForeignKey('course_content.id'))
     title = Column(String(255), nullable=False)
-    file_type = Column(String(50))  # pdf, ppt, doc, video, etc.
-    file_path = Column(String(1024))
-    file_size = Column(Integer)
-    mime_type = Column(String(255))
-    upload_status = Column(String(50), default='pending')  # pending, processing, completed, failed
-    visibility = Column(String(50), default='enrolled')  # public, enrolled, restricted
-    processing_error = Column(Text)
-    ocr_text = Column(Text)  # Extracted text content
-    thumbnail_path = Column(String(1024))
-    uploaded_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    description = Column(Text)
+    file_path = Column(String(1024), nullable=False)
+    file_type = Column(String(50))  # pdf, doc, ppt, etc.
+    file_size = Column(Integer)  # Size in bytes
+    is_public = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    meta_data = Column(JSONB)  # For storing additional extracted content
+    meta_data = Column(JSONB)
+
+    # Relationships
+    course = relationship('Courses', backref='files')
+    content_nodes = relationship('ContentNode', back_populates='file', cascade='all, delete-orphan')
+    live_content_nodes = relationship('LiveContentNode', back_populates='file', cascade='all, delete-orphan')
 
 class CourseParts(Base):
     """Model class for course_parts table - Top-level organization of course content."""
@@ -546,7 +542,9 @@ class TextbookContent(Base):
     author = Column(String(255))
     description = Column(Text)
     content_type = Column(String(50))  # textbook, notes, summary
-    file_path = Column(String(1024))
+    bucket_name = Column(String(255), nullable=False, default='textbook-materials')  # Supabase storage bucket
+    storage_path = Column(String(1024), nullable=False)  # Path within the bucket
+    file_path = Column(String(1024), nullable=False)  # Full URL or path to access the file
     is_public = Column(Boolean, default=False)
     difficulty_level = Column(Integer)
     language = Column(String(50))
@@ -555,6 +553,8 @@ class TextbookContent(Base):
     total_parts = Column(Integer, default=0)
     total_chapters = Column(Integer, default=0)
     total_topics = Column(Integer, default=0)
+    storage_provider = Column(String(50), default='supabase')  # For future extensibility
+    storage_metadata = Column(JSONB)  # For Supabase-specific metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
@@ -795,6 +795,14 @@ class ContentNode(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
+    
+    # Optional relationships for course content types
+    assignment_id = Column(UUID(as_uuid=True), ForeignKey('assignments.id'))
+    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'))
+    discussion_topic_id = Column(UUID(as_uuid=True), ForeignKey('discussion_topics.id'))
+    announcement_id = Column(UUID(as_uuid=True), ForeignKey('announcements.id'))
+    file_id = Column(UUID(as_uuid=True), ForeignKey('course_files.id'))
+    content_type = Column(String(50))  # assignment, quiz, discussion, announcement, file, etc.
 
     # Relationships
     textbook = relationship('TextbookContent', back_populates='nodes')
@@ -811,6 +819,13 @@ class ContentNode(Base):
     live_versions = relationship('LiveContentNode', back_populates='node', cascade='all, delete-orphan')
     live_decks = relationship('LiveDecks', back_populates='node', cascade='all, delete-orphan')
     live_cards = relationship('LiveCards', back_populates='node', cascade='all, delete-orphan')
+    
+    # New relationships for course content types
+    assignment = relationship('Assignments', back_populates='content_nodes')
+    quiz = relationship('Quizzes', back_populates='content_nodes')
+    discussion_topic = relationship('DiscussionTopics', back_populates='content_nodes')
+    announcement = relationship('Announcements', back_populates='content_nodes')
+    file = relationship('CourseFiles', back_populates='content_nodes')
 
 class NodeComments(Base):
     """Model class for node_comments table - Allows discussions on content nodes at any level."""
@@ -841,13 +856,17 @@ class CourseUploads(Base):
     node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'), nullable=False)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     file_name = Column(String(255), nullable=False)
-    file_path = Column(String(1024), nullable=False)
+    bucket_name = Column(String(255), nullable=False, default='course-materials')  # Supabase storage bucket
+    storage_path = Column(String(1024), nullable=False)  # Path within the bucket
+    file_path = Column(String(1024), nullable=False)  # Full URL or path to access the file
     file_type = Column(String(50))  # pdf, doc, image, video, etc.
     file_size = Column(Integer)  # Size in bytes
     mime_type = Column(String(255))
     upload_status = Column(String(50), default='pending')  # pending, processing, completed, failed
     processing_error = Column(Text)
     visibility = Column(String(50), default='enrolled')  # public, enrolled, restricted
+    storage_provider = Column(String(50), default='supabase')  # For future extensibility
+    storage_metadata = Column(JSONB)  # For Supabase-specific metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
@@ -880,41 +899,48 @@ class CourseResources(Base):
     upload = relationship('CourseUploads', back_populates='resources')
 
 class LiveContentNode(Base):
-    """Model for tracking active study progress of content nodes."""
+    """Model class for live_content_nodes table - Active version of content nodes."""
     __tablename__ = 'live_content_nodes'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'), nullable=False)
-    live_textbook_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'))
-    live_course_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'))
-    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
-    
-    # Progress tracking
-    progress = Column(Float, default=0.0)  # 0.0 to 1.0
-    last_studied = Column(DateTime)
-    next_review = Column(DateTime)
-    ease_factor = Column(Float, default=2.5)  # For spaced repetition
-    study_count = Column(Integer, default=0)
-    
-    # Study settings
+    textbook_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'))
+    course_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'))
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('live_content_nodes.id'))
+    node_type_id = Column(UUID(as_uuid=True), ForeignKey('node_types.id'))
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    order_index = Column(Integer)
+    level = Column(Integer)  # 1=Part, 2=Chapter, 3=Topic, etc.
     is_active = Column(Boolean, default=True)
-    study_mode = Column(String(50))  # normal, review, exam
-    difficulty_level = Column(Integer)  # User's perceived difficulty
-    
-    # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
+    
+    # Optional relationships for course content types
+    assignment_id = Column(UUID(as_uuid=True), ForeignKey('assignments.id'))
+    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'))
+    discussion_topic_id = Column(UUID(as_uuid=True), ForeignKey('discussion_topics.id'))
+    announcement_id = Column(UUID(as_uuid=True), ForeignKey('announcements.id'))
+    file_id = Column(UUID(as_uuid=True), ForeignKey('course_files.id'))
+    content_type = Column(String(50))  # assignment, quiz, discussion, announcement, file, etc.
 
     # Relationships
     node = relationship('ContentNode', back_populates='live_versions')
-    live_textbook = relationship('LiveTextbookContent', back_populates='live_nodes')
-    live_course = relationship('LiveCourseContent', back_populates='live_nodes')
-    user = relationship('Users', back_populates='live_nodes')
+    textbook = relationship('LiveTextbookContent', back_populates='nodes')
+    course = relationship('LiveCourseContent', back_populates='nodes')
+    parent = relationship('LiveContentNode', remote_side=[id], backref='children')
+    node_type = relationship('NodeType', back_populates='live_nodes')
+    live_decks = relationship('LiveDecks', back_populates='node', cascade='all, delete-orphan')
+    live_cards = relationship('LiveCards', back_populates='node', cascade='all, delete-orphan')
+    live_notes = relationship('LiveNotes', back_populates='node', cascade='all, delete-orphan')
     
-    # Study materials
-    decks = relationship('LiveDecks', back_populates='live_node', cascade='all, delete-orphan')
-    notes = relationship('LiveNotes', back_populates='live_node', cascade='all, delete-orphan')
+    # New relationships for course content types
+    assignment = relationship('Assignments', back_populates='live_content_nodes')
+    quiz = relationship('Quizzes', back_populates='live_content_nodes')
+    discussion_topic = relationship('DiscussionTopics', back_populates='live_content_nodes')
+    announcement = relationship('Announcements', back_populates='live_content_nodes')
+    file = relationship('CourseFiles', back_populates='live_content_nodes')
 
 class Notes(Base):
     """Model class for notes table - Enhanced to link with content nodes."""
@@ -1110,6 +1136,499 @@ class SubscriptionUsage(Base):
     last_used_at = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+# Communication Tools
+class Announcements(Base):
+    """Model class for announcements table - System-wide and course-specific announcements."""
+    __tablename__ = 'announcements'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'))  # Null for system-wide announcements
+    priority = Column(String(20), default='normal')  # low, normal, high, urgent
+    is_pinned = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    publish_at = Column(DateTime, default=datetime.utcnow)
+    expire_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    author = relationship('Users', backref='announcements')
+    course = relationship('Courses', backref='announcements')
+    read_status = relationship('AnnouncementReadStatus', back_populates='announcement', cascade='all, delete-orphan')
+    content_nodes = relationship('ContentNode', back_populates='announcement', cascade='all, delete-orphan')
+    live_content_nodes = relationship('LiveContentNode', back_populates='announcement', cascade='all, delete-orphan')
+
+class AnnouncementReadStatus(Base):
+    """Model class for announcement_read_status table - Tracks which users have read announcements."""
+    __tablename__ = 'announcement_read_status'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    announcement_id = Column(UUID(as_uuid=True), ForeignKey('announcements.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    read_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    announcement = relationship('Announcements', back_populates='read_status')
+    user = relationship('Users', backref='announcement_reads')
+
+class DiscussionForums(Base):
+    """Model class for discussion_forums table - Course discussion boards."""
+    __tablename__ = 'discussion_forums'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    is_announcement = Column(Boolean, default=False)  # If true, only instructors can post
+    is_pinned = Column(Boolean, default=False)
+    is_locked = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    course = relationship('Courses', backref='discussion_forums')
+    topics = relationship('DiscussionTopics', back_populates='forum', cascade='all, delete-orphan')
+
+class DiscussionTopics(Base):
+    """Model class for discussion_topics table - Topics within forums."""
+    __tablename__ = 'discussion_topics'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    forum_id = Column(UUID(as_uuid=True), ForeignKey('discussion_forums.id'), nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    is_pinned = Column(Boolean, default=False)
+    is_locked = Column(Boolean, default=False)
+    is_anonymous = Column(Boolean, default=False)
+    view_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    forum = relationship('DiscussionForums', back_populates='topics')
+    author = relationship('Users', backref='discussion_topics')
+    replies = relationship('DiscussionReplies', back_populates='topic', cascade='all, delete-orphan')
+    content_nodes = relationship('ContentNode', back_populates='discussion_topic', cascade='all, delete-orphan')
+    live_content_nodes = relationship('LiveContentNode', back_populates='discussion_topic', cascade='all, delete-orphan')
+
+class DiscussionReplies(Base):
+    """Model class for discussion_replies table - Replies to discussion topics."""
+    __tablename__ = 'discussion_replies'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    topic_id = Column(UUID(as_uuid=True), ForeignKey('discussion_topics.id'), nullable=False)
+    author_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    parent_id = Column(UUID(as_uuid=True), ForeignKey('discussion_replies.id'))  # For nested replies
+    content = Column(Text, nullable=False)
+    is_solution = Column(Boolean, default=False)  # Marked as solution by instructor
+    is_anonymous = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    topic = relationship('DiscussionTopics', back_populates='replies')
+    author = relationship('Users', backref='discussion_replies')
+    parent = relationship('DiscussionReplies', remote_side=[id], backref='children')
+
+class DirectMessages(Base):
+    """Model class for direct_messages table - Private messaging between users."""
+    __tablename__ = 'direct_messages'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    sender_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    recipient_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    subject = Column(String(255))
+    content = Column(Text, nullable=False)
+    is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    sender = relationship('Users', foreign_keys=[sender_id], backref='sent_messages')
+    recipient = relationship('Users', foreign_keys=[recipient_id], backref='received_messages')
+
+# Assessment and Grading System
+class Assignments(Base):
+    """Model class for assignments table - Course assignments."""
+    __tablename__ = 'assignments'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    due_date = Column(DateTime)
+    points_possible = Column(Float)
+    assignment_type = Column(String(50))  # file_upload, text_entry, external_tool, etc.
+    submission_type = Column(String(50))  # individual, group
+    group_category_id = Column(UUID(as_uuid=True), ForeignKey('group_categories.id'))
+    is_published = Column(Boolean, default=False)
+    is_locked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    course = relationship('Courses', backref='assignments')
+    group_category = relationship('GroupCategories', backref='assignments')
+    submissions = relationship('AssignmentSubmissions', back_populates='assignment', cascade='all, delete-orphan')
+    content_nodes = relationship('ContentNode', back_populates='assignment', cascade='all, delete-orphan')
+    live_content_nodes = relationship('LiveContentNode', back_populates='assignment', cascade='all, delete-orphan')
+
+class AssignmentSubmissions(Base):
+    """Model class for assignment_submissions table - Student submissions for assignments."""
+    __tablename__ = 'assignment_submissions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    assignment_id = Column(UUID(as_uuid=True), ForeignKey('assignments.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    group_id = Column(UUID(as_uuid=True), ForeignKey('groups.id'))  # For group submissions
+    submission_type = Column(String(50))  # file_upload, text_entry, external_tool, etc.
+    content = Column(Text)  # For text submissions
+    file_path = Column(String(1024))  # For file submissions
+    external_url = Column(String(1024))  # For external tool submissions
+    submitted_at = Column(DateTime, default=datetime.utcnow)
+    is_late = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    assignment = relationship('Assignments', back_populates='submissions')
+    user = relationship('Users', backref='assignment_submissions')
+    group = relationship('Groups', backref='assignment_submissions')
+    grades = relationship('AssignmentGrades', back_populates='submission', cascade='all, delete-orphan')
+
+class AssignmentGrades(Base):
+    """Model class for assignment_grades table - Grades for assignment submissions."""
+    __tablename__ = 'assignment_grades'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    submission_id = Column(UUID(as_uuid=True), ForeignKey('assignment_submissions.id'), nullable=False)
+    grader_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    score = Column(Float)
+    feedback = Column(Text)
+    is_final = Column(Boolean, default=False)
+    graded_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    submission = relationship('AssignmentSubmissions', back_populates='grades')
+    grader = relationship('Users', backref='assignment_grades_given')
+
+class Quizzes(Base):
+    """Model class for quizzes table - Course quizzes and tests."""
+    __tablename__ = 'quizzes'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text)
+    quiz_type = Column(String(50))  # practice_quiz, assignment, graded_survey, survey
+    time_limit = Column(Integer)  # Time limit in minutes, null for no limit
+    due_date = Column(DateTime)
+    points_possible = Column(Float)
+    is_published = Column(Boolean, default=False)
+    is_locked = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    course = relationship('Courses', backref='quizzes')
+    questions = relationship('QuizQuestions', back_populates='quiz', cascade='all, delete-orphan')
+    attempts = relationship('QuizAttempts', back_populates='quiz', cascade='all, delete-orphan')
+    content_nodes = relationship('ContentNode', back_populates='quiz', cascade='all, delete-orphan')
+    live_content_nodes = relationship('LiveContentNode', back_populates='quiz', cascade='all, delete-orphan')
+
+class QuizQuestions(Base):
+    """Model class for quiz_questions table - Questions for quizzes."""
+    __tablename__ = 'quiz_questions'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'), nullable=False)
+    question_type = Column(String(50))  # multiple_choice, true_false, short_answer, essay, etc.
+    question_text = Column(Text, nullable=False)
+    points_possible = Column(Float)
+    order_index = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    quiz = relationship('Quizzes', back_populates='questions')
+    answers = relationship('QuizAnswers', back_populates='question', cascade='all, delete-orphan')
+    responses = relationship('QuizResponses', back_populates='question', cascade='all, delete-orphan')
+
+class QuizAnswers(Base):
+    """Model class for quiz_answers table - Possible answers for quiz questions."""
+    __tablename__ = 'quiz_answers'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    question_id = Column(UUID(as_uuid=True), ForeignKey('quiz_questions.id'), nullable=False)
+    answer_text = Column(Text, nullable=False)
+    is_correct = Column(Boolean, default=False)
+    order_index = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    question = relationship('QuizQuestions', back_populates='answers')
+
+class QuizAttempts(Base):
+    """Model class for quiz_attempts table - Student attempts at quizzes."""
+    __tablename__ = 'quiz_attempts'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    started_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime)
+    score = Column(Float)
+    is_late = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    quiz = relationship('Quizzes', back_populates='attempts')
+    user = relationship('Users', backref='quiz_attempts')
+    responses = relationship('QuizResponses', back_populates='attempt', cascade='all, delete-orphan')
+
+class QuizResponses(Base):
+    """Model class for quiz_responses table - Student responses to quiz questions."""
+    __tablename__ = 'quiz_responses'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    attempt_id = Column(UUID(as_uuid=True), ForeignKey('quiz_attempts.id'), nullable=False)
+    question_id = Column(UUID(as_uuid=True), ForeignKey('quiz_questions.id'), nullable=False)
+    answer_id = Column(UUID(as_uuid=True), ForeignKey('quiz_answers.id'))  # For multiple choice
+    response_text = Column(Text)  # For text responses
+    is_correct = Column(Boolean)
+    points_earned = Column(Float)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    attempt = relationship('QuizAttempts', back_populates='responses')
+    question = relationship('QuizQuestions', back_populates='responses')
+    answer = relationship('QuizAnswers', backref='responses')
+
+# Analytics and Reporting
+class AnalyticsEvents(Base):
+    """Model class for analytics_events table - Tracks user interactions for analytics."""
+    __tablename__ = 'analytics_events'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    event_type = Column(String(100), nullable=False)  # page_view, content_interaction, etc.
+    event_data = Column(JSONB, nullable=False)  # Detailed event data
+    session_id = Column(String(255))
+    ip_address = Column(String(45))
+    user_agent = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship('Users', backref='analytics_events')
+
+class ContentAnalytics(Base):
+    """Model class for content_analytics table - Aggregated analytics for content."""
+    __tablename__ = 'content_analytics'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    content_id = Column(UUID(as_uuid=True), nullable=False)
+    content_type = Column(String(50), nullable=False)  # course, module, deck, etc.
+    view_count = Column(Integer, default=0)
+    unique_viewers = Column(Integer, default=0)
+    average_time_spent = Column(Integer, default=0)  # In seconds
+    completion_rate = Column(Float, default=0)  # 0-1 scale
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+class UserAnalytics(Base):
+    """Model class for user_analytics table - Aggregated analytics for users."""
+    __tablename__ = 'user_analytics'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    total_time_spent = Column(Integer, default=0)  # In seconds
+    content_interaction_count = Column(Integer, default=0)
+    completion_rate = Column(Float, default=0)  # 0-1 scale
+    last_active = Column(DateTime)
+    last_updated = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    user = relationship('Users', backref='analytics')
+
+# Integration Capabilities
+class ExternalIntegrations(Base):
+    """Model class for external_integrations table - Manages third-party integrations."""
+    __tablename__ = 'external_integrations'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)
+    provider = Column(String(100), nullable=False)  # google, microsoft, zoom, etc.
+    integration_type = Column(String(50))  # calendar, drive, meeting, etc.
+    is_active = Column(Boolean, default=True)
+    config = Column(JSONB)  # Integration configuration
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+class UserIntegrations(Base):
+    """Model class for user_integrations table - User-specific integration settings."""
+    __tablename__ = 'user_integrations'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    integration_id = Column(UUID(as_uuid=True), ForeignKey('external_integrations.id'), nullable=False)
+    is_enabled = Column(Boolean, default=True)
+    access_token = Column(String(1024))
+    refresh_token = Column(String(1024))
+    token_expires_at = Column(DateTime)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    user = relationship('Users', backref='integrations')
+    integration = relationship('ExternalIntegrations', backref='user_integrations')
+
+# Mobile and Accessibility
+class UserDevices(Base):
+    """Model class for user_devices table - Tracks user devices for mobile support."""
+    __tablename__ = 'user_devices'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    device_id = Column(String(255), nullable=False)
+    device_type = Column(String(50))  # mobile, tablet, desktop
+    device_name = Column(String(255))
+    last_active = Column(DateTime)
+    push_token = Column(String(255))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    user = relationship('Users', backref='devices')
+
+class AccessibilityPreferences(Base):
+    """Model class for accessibility_preferences table - User accessibility settings."""
+    __tablename__ = 'accessibility_preferences'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    high_contrast = Column(Boolean, default=False)
+    font_size = Column(String(20), default='medium')  # small, medium, large
+    screen_reader = Column(Boolean, default=False)
+    reduced_motion = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    user = relationship('Users', backref='accessibility_preferences')
+
+# Administrative Tools
+class SystemSettings(Base):
+    """Model class for system_settings table - Global system configuration."""
+    __tablename__ = 'system_settings'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    key = Column(String(100), nullable=False, unique=True)
+    value = Column(JSONB, nullable=False)
+    description = Column(Text)
+    is_public = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    updated_by = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+
+    # Relationships
+    updater = relationship('Users', backref='updated_settings')
+
+class SystemLogs(Base):
+    """Model class for system_logs table - System-wide logging."""
+    __tablename__ = 'system_logs'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    level = Column(String(20), nullable=False)  # info, warning, error, critical
+    category = Column(String(50))  # auth, content, system, etc.
+    message = Column(Text, nullable=False)
+    details = Column(JSONB)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'))
+    ip_address = Column(String(45))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    user = relationship('Users', backref='system_logs')
+
+# Group Management
+class GroupCategories(Base):
+    """Model class for group_categories table - Categories for grouping students."""
+    __tablename__ = 'group_categories'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    group_limit = Column(Integer)  # Maximum number of students per group
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    course = relationship('Courses', backref='group_categories')
+    groups = relationship('Groups', back_populates='category', cascade='all, delete-orphan')
+
+class Groups(Base):
+    """Model class for groups table - Student groups for collaborative work."""
+    __tablename__ = 'groups'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    category_id = Column(UUID(as_uuid=True), ForeignKey('group_categories.id'), nullable=False)
+    name = Column(String(255), nullable=False)
+    description = Column(Text)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    category = relationship('GroupCategories', back_populates='groups')
+    members = relationship('GroupMembers', back_populates='group', cascade='all, delete-orphan')
+
+class GroupMembers(Base):
+    """Model class for group_members table - Members of student groups."""
+    __tablename__ = 'group_members'
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    group_id = Column(UUID(as_uuid=True), ForeignKey('groups.id'), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    role = Column(String(50), default='member')  # leader, member
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    meta_data = Column(JSONB)
+
+    # Relationships
+    group = relationship('Groups', back_populates='members')
+    user = relationship('Users', backref='group_memberships')
 
 def init_db(engine):
     """Initialize database tables."""

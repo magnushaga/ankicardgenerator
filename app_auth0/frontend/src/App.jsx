@@ -38,6 +38,11 @@ function AppContent() {
       console.log('Access Token from localStorage:', accessToken ? 'Found' : 'Not found');
       console.log('==========================');
 
+      if (savedUserInfo) {
+        const parsedUserInfo = JSON.parse(savedUserInfo);
+        setUserInfo(parsedUserInfo);
+      }
+
       if (accessToken) {
         const now = Date.now();
         if (!lastTokenVerification || (now - lastTokenVerification) >= TOKEN_VERIFICATION_INTERVAL) {
@@ -59,11 +64,6 @@ function AppContent() {
           } else if (response.status === 401) {
             console.log('Token expired or invalid, clearing data');
             clearAllData();
-          }
-        } else {
-          // Use cached data
-          if (savedUserInfo) {
-            setUserInfo(JSON.parse(savedUserInfo));
           }
         }
       }
@@ -135,6 +135,21 @@ function AppContent() {
     clearAllData();
   };
 
+  const handleLoginSuccess = async (user, tokens) => {
+    console.log('Login successful, updating state with user info:', user);
+    
+    // Update state with user info and tokens
+    setUserInfo(user);
+    setTokens(tokens);
+    setIsAuthenticated(true);
+    
+    // Ensure state updates are processed
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    // Trigger admin status check
+    await checkAdminStatus();
+  };
+
   const handleSearch = () => {
     console.log('Searching for:', searchQuery);
   };
@@ -144,6 +159,7 @@ function AppContent() {
       const token = localStorage.getItem('access_token');
       if (!token) {
         console.log('No access token found for admin check');
+        setIsAdmin(false);
         return;
       }
 
@@ -164,7 +180,10 @@ function AppContent() {
         return;
       }
 
-      console.log('Token verified, checking admin status...');
+      const userInfoData = await userInfoResponse.json();
+      console.log('User info verified:', userInfoData);
+
+      console.log('Checking admin status...');
       const response = await fetch('http://localhost:5001/api/admin/check', {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -173,16 +192,49 @@ function AppContent() {
       });
 
       console.log('Admin check response:', response.status);
+      const data = await response.json();
+      console.log('Admin check data:', data);
+
       if (response.ok) {
-        console.log('User is an admin');
-        setIsAdmin(true);
+        setIsAdmin(data.is_admin);
+        if (data.is_admin) {
+          console.log('User is an admin with roles:', data.roles);
+          // Update user info with admin details
+          const updatedUserInfo = {
+            ...userInfoData.user,
+            isAdmin: true,
+            adminRoles: data.roles
+          };
+          setUserInfo(updatedUserInfo);
+          localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
+        } else {
+          console.log('User is not an admin');
+          // Update user info to reflect non-admin status
+          const updatedUserInfo = {
+            ...userInfoData.user,
+            isAdmin: false,
+            adminRoles: []
+          };
+          setUserInfo(updatedUserInfo);
+          localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
+        }
       } else {
-        console.log('User is not an admin');
+        console.log('Admin check failed:', response.status);
+        console.error('Admin check error:', data);
         setIsAdmin(false);
+        // Update user info to reflect non-admin status
+        const updatedUserInfo = {
+          ...userInfoData.user,
+          isAdmin: false,
+          adminRoles: []
+        };
+        setUserInfo(updatedUserInfo);
+        localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
       }
     } catch (err) {
       console.error('Error checking admin status:', err);
       setIsAdmin(false);
+      // Don't update user info on error to prevent data loss
     }
   };
 
@@ -208,6 +260,7 @@ function AppContent() {
         tokens={tokens}
         onLogout={handleLogout}
         isAdmin={isAdmin}
+        onLoginSuccess={handleLoginSuccess}
       />
       <Box sx={{ flex: 1 }}>
         <Routes>
@@ -216,8 +269,7 @@ function AppContent() {
             path="/create-deck"
             element={
               userInfo ? (
-                <Box>
-                  <Header />
+                <Box sx={{ flex: 1, p: 3 }}>
                   <CreateDeck />
                 </Box>
               ) : (

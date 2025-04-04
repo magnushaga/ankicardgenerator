@@ -11,7 +11,8 @@ import {
   Avatar,
   Divider,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Button
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme as useCustomTheme } from '../lib/ThemeContext';
@@ -26,7 +27,7 @@ import LogoutButton from './LogoutButton';
 import SearchIcon from '@mui/icons-material/Search';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 
-const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin }) => {
+const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin, onLoginSuccess }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const theme = useTheme();
   const { isDarkMode, toggleTheme } = useCustomTheme();
@@ -104,12 +105,17 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
         localStorage.setItem('access_token', data.tokens.access_token);
         setLastTokenVerification(Date.now());
         console.log('Stored tokens and user info in localStorage');
+        
+        if (typeof onLoginSuccess === 'function') {
+          await new Promise(resolve => {
+            onLoginSuccess(data.user, data.tokens);
+            setTimeout(resolve, 100);
+          });
+        }
+
+        processedCodes.push(code);
+        localStorage.setItem('processed_codes', JSON.stringify(processedCodes));
       }
-
-      processedCodes.push(code);
-      localStorage.setItem('processed_codes', JSON.stringify(processedCodes));
-
-      window.location.reload();
     } catch (error) {
       console.error('Error exchanging code for tokens:', error);
       clearAllData();
@@ -256,7 +262,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           </Box>
         )}
 
-        {/* Right side - Theme toggle and User menu */}
+        {/* Right side - Theme toggle, Admin button, and User menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton 
             onClick={toggleTheme} 
@@ -265,6 +271,28 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           >
             {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
+
+          {/* Admin Dashboard Button - Only show if user is admin */}
+          {userInfo && isAdmin && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AdminPanelSettingsIcon />}
+              onClick={() => navigate('/admin')}
+              sx={{ 
+                mr: 1,
+                color: 'primary.main',
+                borderColor: 'primary.main',
+                '&:hover': {
+                  borderColor: 'primary.dark',
+                  bgcolor: 'primary.light',
+                  color: 'primary.dark'
+                }
+              }}
+            >
+              Admin
+            </Button>
+          )}
 
           {userInfo ? (
             <>
@@ -297,7 +325,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
                 </MenuItem>
                 {isAdmin && (
                   <MenuItem onClick={handleAdminPanel}>
-                    <PersonIcon sx={{ mr: 1 }} /> Admin Dashboard
+                    <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Dashboard
                   </MenuItem>
                 )}
                 <MenuItem onClick={handleLogout}>

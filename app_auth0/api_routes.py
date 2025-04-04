@@ -4,9 +4,9 @@ import os
 import uuid
 import json
 from datetime import datetime, timedelta
-from models import (
-    Users, Textbooks, Parts, Chapters, Topics, Decks, Cards,
-    StudySessions, CardReviews, SubjectCategories, SubjectSubcategories
+from models_proposed_dynamic import (
+    Users, TextbookContent, CourseParts, CourseChapters, CourseTopics, Decks, Cards,
+    StudyProgress, CardReviews, SubjectCategories, SubjectSubcategories
 )
 from supabase import create_client
 from dotenv import load_dotenv
@@ -1660,49 +1660,81 @@ def get_deck_cards(deck_id):
 @api.route('/api/course-materials', methods=['POST'])
 @requires_auth
 def upload_course_material():
-    """Upload a new course material"""
+    """Upload a course material file."""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+        
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+        
+    title = request.form.get('title')
+    description = request.form.get('description')
+    material_type = request.form.get('material_type')
+    tags = request.form.get('tags', [])
+    metadata = request.form.get('metadata', {})
+    
+    if not title or not material_type:
+        return jsonify({'error': 'title and material_type are required'}), 400
+    
     try:
-        if 'file' not in request.files:
-            return jsonify({'error': 'No file provided'}), 400
-            
-        file = request.files['file']
-        if file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-            
-        # Get additional metadata from form data
-        title = request.form.get('title')
-        description = request.form.get('description')
-        material_type = request.form.get('material_type')
-        tags = request.form.getlist('tags')
-        metadata = json.loads(request.form.get('metadata', '{}'))
+        # Generate a unique file ID
+        file_id = str(uuid.uuid4())
         
-        if not all([title, material_type]):
-            return jsonify({'error': 'title and material_type are required'}), 400
-            
-        # TODO: Implement file upload to storage (e.g., S3, Supabase Storage)
-        # For now, we'll just store the file path
-        file_path = f"course_materials/{request.user['sub']}/{file.filename}"
+        # Determine the bucket based on material type
+        bucket_name = 'course-materials'
         
+        # Create a path within the bucket
+        storage_path = f"{request.user['sub']}/{file_id}/{file.filename}"
+        
+        # Upload file to Supabase Storage
+        file_content = file.read()
+        file_size = len(file_content)
+        
+        # Upload to Supabase Storage
+        storage_response = supabase.storage.from_(bucket_name).upload(
+            path=storage_path,
+            file=file_content,
+            file_options={"content-type": file.content_type}
+        )
+        
+        # Get the public URL for the file
+        file_url = supabase.storage.from_(bucket_name).get_public_url(storage_path)
+        
+        # Prepare metadata for database
         material_data = {
-            'id': str(uuid.uuid4()),
+            'id': file_id,
             'user_id': request.user['sub'],
             'title': title,
             'description': description,
             'material_type': material_type,
-            'file_path': file_path,
-            'file_size': 0,  # TODO: Get actual file size
+            'bucket_name': bucket_name,
+            'storage_path': storage_path,
+            'file_path': file_url,
+            'file_type': file.filename.split('.')[-1].lower(),
+            'file_size': file_size,
             'mime_type': file.content_type,
-            'tags': tags,
-            'metadata': metadata
+            'upload_status': 'completed',
+            'visibility': 'enrolled',
+            'storage_provider': 'supabase',
+            'storage_metadata': {
+                'original_filename': file.filename,
+                'content_type': file.content_type
+            },
+            'meta_data': metadata
         }
         
-        result = supabase.table('course_materials').insert(material_data).execute()
+        # Insert into database
+        result = supabase.table('course_uploads').insert(material_data).execute()
         
-        return jsonify(result.data[0])
+        return jsonify({
+            'success': True,
+            'message': 'File uploaded successfully',
+            'data': material_data
+        }), 201
         
     except Exception as e:
-        logger.error(f"Error uploading course material: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({'error': f'Error uploading file: {str(e)}'}), 500
 
 @api.route('/api/course-materials', methods=['GET'])
 @requires_auth

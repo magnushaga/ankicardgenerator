@@ -3,11 +3,11 @@ import {
   Box, 
   Typography, 
   Button, 
-  Grid, 
   Card, 
   CardContent,
   useTheme,
-  Container
+  Container,
+  Grid
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme as useCustomTheme } from '../lib/ThemeContext';
@@ -110,7 +110,14 @@ const LandingPage = () => {
         </Box>
 
         {/* Features Section */}
-        <Grid container spacing={4} sx={{ mb: { xs: 6, md: 8 } }}>
+        <Grid 
+          container 
+          spacing={{ xs: 3, md: 4 }} 
+          sx={{ 
+            mb: { xs: 6, md: 8 },
+            px: { xs: 2, sm: 3, md: 4 }
+          }}
+        >
           {features.map((feature, index) => (
             <Grid item xs={12} sm={6} md={3} key={index}>
               <Card 
@@ -120,30 +127,48 @@ const LandingPage = () => {
                   flexDirection: 'column',
                   alignItems: 'center',
                   textAlign: 'center',
-                  p: 2,
-                  transition: 'transform 0.2s',
+                  p: 3,
+                  transition: 'all 0.3s ease-in-out',
+                  bgcolor: isDarkMode ? 'background.paper' : 'background.default',
+                  border: `1px solid ${theme.palette.divider}`,
                   '&:hover': {
-                    transform: 'translateY(-4px)'
+                    transform: 'translateY(-8px)',
+                    boxShadow: theme.shadows[8],
+                    borderColor: theme.palette.primary.main
                   }
                 }}
               >
                 <Box sx={{ 
                   color: 'primary.main',
-                  mb: 2
+                  mb: 2,
+                  p: 2,
+                  borderRadius: '50%',
+                  bgcolor: isDarkMode ? 'rgba(25, 118, 210, 0.1)' : 'rgba(25, 118, 210, 0.05)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
                 }}>
                   {feature.icon}
                 </Box>
-                <CardContent>
+                <CardContent sx={{ flexGrow: 1, p: 2 }}>
                   <Typography 
                     variant="h6" 
                     component="h3" 
-                    sx={{ mb: 1 }}
+                    sx={{ 
+                      mb: 1,
+                      fontWeight: 600,
+                      color: 'text.primary'
+                    }}
                   >
                     {feature.title}
                   </Typography>
                   <Typography 
-                    variant="body2" 
+                    variant="body1" 
                     color="text.secondary"
+                    sx={{ 
+                      lineHeight: 1.6,
+                      fontSize: '0.95rem'
+                    }}
                   >
                     {feature.description}
                   </Typography>

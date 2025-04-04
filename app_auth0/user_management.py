@@ -38,9 +38,16 @@ def create_or_update_user(auth0_user):
             'last_login': datetime.utcnow().isoformat(),
             'is_active': True,
             'email_verified': auth0_user.get('email_verified', False),
-            'preferred_study_time': None,
-            'notification_preferences': {},
-            'study_goals': {}
+            'study_preferences': {
+                'preferred_study_time': None,
+                'notification_preferences': {},
+                'study_goals': {}
+            },
+            'institution_id': None,
+            'department_id': None,
+            'role': 'student',  # Default role
+            'stripe_customer_id': None,
+            'meta_data': {}
         }
 
         # Check if user exists
@@ -208,7 +215,17 @@ def sync_auth0_user_to_supabase(auth0_user):
             'picture': auth0_user.get('picture'),
             'email_verified': auth0_user.get('email_verified', False),
             'updated_at': datetime.utcnow().isoformat(),
-            'last_login': datetime.utcnow().isoformat()
+            'last_login': datetime.utcnow().isoformat(),
+            'study_preferences': {
+                'preferred_study_time': None,
+                'notification_preferences': {},
+                'study_goals': {}
+            },
+            'institution_id': None,
+            'department_id': None,
+            'role': 'student',  # Default role
+            'stripe_customer_id': None,
+            'meta_data': {}
         }
         
         if result.data and len(result.data) > 0:
@@ -218,6 +235,9 @@ def sync_auth0_user_to_supabase(auth0_user):
             logger.info(f"Updated user {user['id']} in Supabase")
         else:
             # Create new user
+            user_data['id'] = str(uuid.uuid4())  # Generate a UUID for the new user
+            user_data['created_at'] = datetime.utcnow().isoformat()
+            user_data['is_active'] = True
             result = supabase.table('users').insert(user_data).execute()
             logger.info(f"Created new user in Supabase")
             
