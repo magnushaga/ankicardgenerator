@@ -402,25 +402,31 @@ class LiveCourseSections(Base):
     meta_data = Column(JSONB)
 
 class CourseFiles(Base):
-    """Model class for course_files table - Files associated with courses."""
+    """Model class for course_files table - Manages uploaded course materials."""
     __tablename__ = 'course_files'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    module_id = Column(UUID(as_uuid=True), ForeignKey('course_modules.id'))
+    content_id = Column(UUID(as_uuid=True), ForeignKey('course_content.id'))
     title = Column(String(255), nullable=False)
-    description = Column(Text)
-    file_path = Column(String(1024), nullable=False)
-    file_type = Column(String(50))  # pdf, doc, ppt, etc.
-    file_size = Column(Integer)  # Size in bytes
-    is_public = Column(Boolean, default=True)
+    file_type = Column(String(50))  # pdf, ppt, doc, video, etc.
+    bucket_name = Column(String(255), nullable=False, default='course-materials')  # Supabase storage bucket
+    storage_path = Column(String(1024), nullable=False)  # Path within the bucket
+    file_path = Column(String(1024), nullable=False)  # Full URL or path to access the file
+    file_size = Column(Integer)
+    mime_type = Column(String(255))
+    upload_status = Column(String(50), default='pending')  # pending, processing, completed, failed
+    visibility = Column(String(50), default='enrolled')  # public, enrolled, restricted
+    processing_error = Column(Text)
+    ocr_text = Column(Text)  # Extracted text content
+    thumbnail_path = Column(String(1024))
+    storage_provider = Column(String(50), default='supabase')  # For future extensibility
+    storage_metadata = Column(JSONB)  # For Supabase-specific metadata
+    uploaded_by = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    meta_data = Column(JSONB)
-
-    # Relationships
-    course = relationship('Courses', backref='files')
-    content_nodes = relationship('ContentNode', back_populates='file', cascade='all, delete-orphan')
-    live_content_nodes = relationship('LiveContentNode', back_populates='file', cascade='all, delete-orphan')
+    meta_data = Column(JSONB)  # For storing additional extracted content
 
 class CourseParts(Base):
     """Model class for course_parts table - Top-level organization of course content."""
@@ -795,14 +801,6 @@ class ContentNode(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
-    
-    # Optional relationships for course content types
-    assignment_id = Column(UUID(as_uuid=True), ForeignKey('assignments.id'))
-    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'))
-    discussion_topic_id = Column(UUID(as_uuid=True), ForeignKey('discussion_topics.id'))
-    announcement_id = Column(UUID(as_uuid=True), ForeignKey('announcements.id'))
-    file_id = Column(UUID(as_uuid=True), ForeignKey('course_files.id'))
-    content_type = Column(String(50))  # assignment, quiz, discussion, announcement, file, etc.
 
     # Relationships
     textbook = relationship('TextbookContent', back_populates='nodes')
@@ -819,13 +817,10 @@ class ContentNode(Base):
     live_versions = relationship('LiveContentNode', back_populates='node', cascade='all, delete-orphan')
     live_decks = relationship('LiveDecks', back_populates='node', cascade='all, delete-orphan')
     live_cards = relationship('LiveCards', back_populates='node', cascade='all, delete-orphan')
-    
-    # New relationships for course content types
-    assignment = relationship('Assignments', back_populates='content_nodes')
-    quiz = relationship('Quizzes', back_populates='content_nodes')
-    discussion_topic = relationship('DiscussionTopics', back_populates='content_nodes')
-    announcement = relationship('Announcements', back_populates='content_nodes')
-    file = relationship('CourseFiles', back_populates='content_nodes')
+    # New relationships for assessments
+    assignments = relationship('Assignments', back_populates='node', cascade='all, delete-orphan')
+    quizzes = relationship('Quizzes', back_populates='node', cascade='all, delete-orphan')
+    discussion_topics = relationship('DiscussionTopics', back_populates='node', cascade='all, delete-orphan')
 
 class NodeComments(Base):
     """Model class for node_comments table - Allows discussions on content nodes at any level."""
@@ -899,48 +894,41 @@ class CourseResources(Base):
     upload = relationship('CourseUploads', back_populates='resources')
 
 class LiveContentNode(Base):
-    """Model class for live_content_nodes table - Active version of content nodes."""
+    """Model for tracking active study progress of content nodes."""
     __tablename__ = 'live_content_nodes'
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'), nullable=False)
-    textbook_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'))
-    course_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'))
-    parent_id = Column(UUID(as_uuid=True), ForeignKey('live_content_nodes.id'))
-    node_type_id = Column(UUID(as_uuid=True), ForeignKey('node_types.id'))
-    title = Column(String(255), nullable=False)
-    description = Column(Text)
-    order_index = Column(Integer)
-    level = Column(Integer)  # 1=Part, 2=Chapter, 3=Topic, etc.
+    live_textbook_id = Column(UUID(as_uuid=True), ForeignKey('live_textbook_content.id'))
+    live_course_id = Column(UUID(as_uuid=True), ForeignKey('live_course_content.id'))
+    user_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    
+    # Progress tracking
+    progress = Column(Float, default=0.0)  # 0.0 to 1.0
+    last_studied = Column(DateTime)
+    next_review = Column(DateTime)
+    ease_factor = Column(Float, default=2.5)  # For spaced repetition
+    study_count = Column(Integer, default=0)
+    
+    # Study settings
     is_active = Column(Boolean, default=True)
+    study_mode = Column(String(50))  # normal, review, exam
+    difficulty_level = Column(Integer)  # User's perceived difficulty
+    
+    # Metadata
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     meta_data = Column(JSONB)
-    
-    # Optional relationships for course content types
-    assignment_id = Column(UUID(as_uuid=True), ForeignKey('assignments.id'))
-    quiz_id = Column(UUID(as_uuid=True), ForeignKey('quizzes.id'))
-    discussion_topic_id = Column(UUID(as_uuid=True), ForeignKey('discussion_topics.id'))
-    announcement_id = Column(UUID(as_uuid=True), ForeignKey('announcements.id'))
-    file_id = Column(UUID(as_uuid=True), ForeignKey('course_files.id'))
-    content_type = Column(String(50))  # assignment, quiz, discussion, announcement, file, etc.
 
     # Relationships
     node = relationship('ContentNode', back_populates='live_versions')
-    textbook = relationship('LiveTextbookContent', back_populates='nodes')
-    course = relationship('LiveCourseContent', back_populates='nodes')
-    parent = relationship('LiveContentNode', remote_side=[id], backref='children')
-    node_type = relationship('NodeType', back_populates='live_nodes')
-    live_decks = relationship('LiveDecks', back_populates='node', cascade='all, delete-orphan')
-    live_cards = relationship('LiveCards', back_populates='node', cascade='all, delete-orphan')
-    live_notes = relationship('LiveNotes', back_populates='node', cascade='all, delete-orphan')
+    live_textbook = relationship('LiveTextbookContent', back_populates='live_nodes')
+    live_course = relationship('LiveCourseContent', back_populates='live_nodes')
+    user = relationship('Users', back_populates='live_nodes')
     
-    # New relationships for course content types
-    assignment = relationship('Assignments', back_populates='live_content_nodes')
-    quiz = relationship('Quizzes', back_populates='live_content_nodes')
-    discussion_topic = relationship('DiscussionTopics', back_populates='live_content_nodes')
-    announcement = relationship('Announcements', back_populates='live_content_nodes')
-    file = relationship('CourseFiles', back_populates='live_content_nodes')
+    # Study materials
+    decks = relationship('LiveDecks', back_populates='live_node', cascade='all, delete-orphan')
+    notes = relationship('LiveNotes', back_populates='live_node', cascade='all, delete-orphan')
 
 class Notes(Base):
     """Model class for notes table - Enhanced to link with content nodes."""
@@ -1160,8 +1148,6 @@ class Announcements(Base):
     author = relationship('Users', backref='announcements')
     course = relationship('Courses', backref='announcements')
     read_status = relationship('AnnouncementReadStatus', back_populates='announcement', cascade='all, delete-orphan')
-    content_nodes = relationship('ContentNode', back_populates='announcement', cascade='all, delete-orphan')
-    live_content_nodes = relationship('LiveContentNode', back_populates='announcement', cascade='all, delete-orphan')
 
 class AnnouncementReadStatus(Base):
     """Model class for announcement_read_status table - Tracks which users have read announcements."""
@@ -1204,6 +1190,7 @@ class DiscussionTopics(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     forum_id = Column(UUID(as_uuid=True), ForeignKey('discussion_forums.id'), nullable=False)
     author_id = Column(UUID(as_uuid=True), ForeignKey('users.id'), nullable=False)
+    node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'))  # Optional link to content node
     title = Column(String(255), nullable=False)
     content = Column(Text, nullable=False)
     is_pinned = Column(Boolean, default=False)
@@ -1217,9 +1204,8 @@ class DiscussionTopics(Base):
     # Relationships
     forum = relationship('DiscussionForums', back_populates='topics')
     author = relationship('Users', backref='discussion_topics')
+    node = relationship('ContentNode', back_populates='discussion_topics')  # New relationship
     replies = relationship('DiscussionReplies', back_populates='topic', cascade='all, delete-orphan')
-    content_nodes = relationship('ContentNode', back_populates='discussion_topic', cascade='all, delete-orphan')
-    live_content_nodes = relationship('LiveContentNode', back_populates='discussion_topic', cascade='all, delete-orphan')
 
 class DiscussionReplies(Base):
     """Model class for discussion_replies table - Replies to discussion topics."""
@@ -1267,6 +1253,7 @@ class Assignments(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'))  # Optional link to content node
     title = Column(String(255), nullable=False)
     description = Column(Text)
     due_date = Column(DateTime)
@@ -1282,10 +1269,9 @@ class Assignments(Base):
 
     # Relationships
     course = relationship('Courses', backref='assignments')
+    node = relationship('ContentNode', back_populates='assignments')  # New relationship
     group_category = relationship('GroupCategories', backref='assignments')
     submissions = relationship('AssignmentSubmissions', back_populates='assignment', cascade='all, delete-orphan')
-    content_nodes = relationship('ContentNode', back_populates='assignment', cascade='all, delete-orphan')
-    live_content_nodes = relationship('LiveContentNode', back_populates='assignment', cascade='all, delete-orphan')
 
 class AssignmentSubmissions(Base):
     """Model class for assignment_submissions table - Student submissions for assignments."""
@@ -1336,6 +1322,7 @@ class Quizzes(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     course_id = Column(UUID(as_uuid=True), ForeignKey('courses.id'), nullable=False)
+    node_id = Column(UUID(as_uuid=True), ForeignKey('content_nodes.id'))  # Optional link to content node
     title = Column(String(255), nullable=False)
     description = Column(Text)
     quiz_type = Column(String(50))  # practice_quiz, assignment, graded_survey, survey
@@ -1350,10 +1337,9 @@ class Quizzes(Base):
 
     # Relationships
     course = relationship('Courses', backref='quizzes')
+    node = relationship('ContentNode', back_populates='quizzes')  # New relationship
     questions = relationship('QuizQuestions', back_populates='quiz', cascade='all, delete-orphan')
     attempts = relationship('QuizAttempts', back_populates='quiz', cascade='all, delete-orphan')
-    content_nodes = relationship('ContentNode', back_populates='quiz', cascade='all, delete-orphan')
-    live_content_nodes = relationship('LiveContentNode', back_populates='quiz', cascade='all, delete-orphan')
 
 class QuizQuestions(Base):
     """Model class for quiz_questions table - Questions for quizzes."""
