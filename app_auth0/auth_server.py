@@ -17,7 +17,7 @@ from admin_routes import admin
 from datetime import datetime, timedelta
 from sqlalchemy import text, create_engine
 from flask_sqlalchemy import SQLAlchemy
-from models import Users
+from models_proposed_dynamic import Users
 import threading
 
 # Configure logging first, before any other code
@@ -32,8 +32,17 @@ load_dotenv()
 
 app = Flask(__name__)
 
+# Configure session
+app.config['SECRET_KEY'] = os.getenv('FLASK_SECRET_KEY')
+app.config['SESSION_TYPE'] = 'filesystem'
+Session(app)
+
 # Initialize SQLAlchemy with proper URL parsing
-password = urllib.parse.quote_plus("H@ukerkul120700")
+DB_PASSWORD = os.getenv('SUPABASE_DB_PASSWORD')
+if not DB_PASSWORD:
+    raise ValueError("SUPABASE_DB_PASSWORD environment variable is required")
+    
+password = urllib.parse.quote_plus(DB_PASSWORD)
 DATABASE_URL = f"postgresql://postgres:{password}@db.wxisvjmhokwtjwcqaarb.supabase.co:5432/postgres"
 app.config['SQLALCHEMY_DATABASE_URI'] = DATABASE_URL
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -120,6 +129,19 @@ def set_cached_user_info(token, user_info):
     """Cache user info with current timestamp"""
     with cache_lock:
         user_info_cache[token] = (user_info, datetime.now())
+        cleanup_cache()
+
+def cleanup_cache():
+    """Remove expired entries from the cache"""
+    current_time = datetime.now()
+    with cache_lock:
+        expired_tokens = [
+            token for token, (_, timestamp) in user_info_cache.items()
+            if current_time - timestamp >= CACHE_DURATION
+        ]
+        for token in expired_tokens:
+            del user_info_cache[token]
+            logger.debug(f"Removed expired cache entry for token ending in ...{token[-6:]}")
 
 def exchange_code_for_tokens(code):
     """Exchange authorization code for tokens"""
@@ -134,13 +156,29 @@ def exchange_code_for_tokens(code):
     
     try:
         response = requests.post(token_url, json=payload)
-        response.raise_for_status()
+        if response.status_code == 400:
+            error_data = response.json()
+            error_description = error_data.get('error_description', 'Unknown error')
+            logger.error(f"Token exchange failed with 400: {error_description}")
+            raise ValueError(f"Token exchange failed: {error_description}")
+        elif response.status_code == 401:
+            logger.error("Token exchange failed: Invalid client credentials")
+            raise ValueError("Token exchange failed: Invalid client credentials")
+        elif response.status_code != 200:
+            logger.error(f"Token exchange failed with status {response.status_code}: {response.text}")
+            raise ValueError(f"Token exchange failed with status {response.status_code}")
+            
         return response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Error exchanging code for tokens: {str(e)}")
-        if hasattr(e, 'response'):
+        logger.error(f"Network error during token exchange: {str(e)}")
+        if hasattr(e, 'response') and e.response:
             logger.error(f"Response content: {e.response.text}")
         raise RuntimeError(f"Failed to exchange code for tokens: {str(e)}")
+    except ValueError as e:
+        raise
+    except Exception as e:
+        logger.error(f"Unexpected error during token exchange: {str(e)}")
+        raise RuntimeError(f"Unexpected error during token exchange: {str(e)}")
 
 def get_user_info_from_supabase(token):
     """Get user info from Supabase database."""

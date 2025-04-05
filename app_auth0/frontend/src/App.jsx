@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Button } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './lib/ThemeContext';
 import Header from './components/Header';
@@ -13,6 +13,10 @@ import AdminDashboard from './components/AdminDashboard';
 import LogoutButton from './components/LogoutButton';
 import LandingPage from './components/LandingPage';
 import CreateDeck from './components/CreateDeck';
+import TextbookDashboard from './components/textbooks/TextbookDashboard';
+import TextbookAnalyzer from './components/textbooks/TextbookAnalyzer';
+import { EditorTestPage } from './editor';
+import { verifyToken, clearAuthData, getAccessToken } from './lib/authUtils';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -30,7 +34,7 @@ function AppContent() {
     try {
       const savedUserInfo = localStorage.getItem('user_info');
       const savedTokens = localStorage.getItem('tokens');
-      const accessToken = localStorage.getItem('access_token');
+      const accessToken = getAccessToken();
 
       console.log('=== App.jsx Debug Info ===');
       console.log('Current User Info:', savedUserInfo ? JSON.parse(savedUserInfo) : null);
@@ -38,33 +42,42 @@ function AppContent() {
       console.log('Access Token from localStorage:', accessToken ? 'Found' : 'Not found');
       console.log('==========================');
 
-      if (accessToken) {
-        const now = Date.now();
-        if (!lastTokenVerification || (now - lastTokenVerification) >= TOKEN_VERIFICATION_INTERVAL) {
-          // Verify token with backend
-          const response = await fetch('http://localhost:5001/userinfo', {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
+      if (savedUserInfo) {
+        const parsedUserInfo = JSON.parse(savedUserInfo);
+        setUserInfo(parsedUserInfo);
+      }
 
-          if (response.ok) {
-            const data = await response.json();
-            if (data.user) {
-              setUserInfo(data.user);
-              localStorage.setItem('user_info', JSON.stringify(data.user));
-              setLastTokenVerification(now);
-            }
-          } else if (response.status === 401) {
-            console.log('Token expired or invalid, clearing data');
-            clearAllData();
+      if (accessToken) {
+        // Set a timeout to prevent getting stuck in loading state
+        const timeoutPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            console.log("Token verification timeout - using cached data");
+            resolve({ 
+              isValid: true, 
+              user: savedUserInfo ? JSON.parse(savedUserInfo) : null, 
+              error: 'Verification timeout' 
+            });
+          }, 10000);
+        });
+        
+        // Race the verification against the timeout
+        const result = await Promise.race([
+          verifyToken(accessToken, true),
+          timeoutPromise
+        ]);
+        
+        if (result.isValid && result.user) {
+          setUserInfo(result.user);
+          // The timestamp is already stored in localStorage by verifyToken
+          const lastVerification = localStorage.getItem('last_token_verification');
+          if (lastVerification) {
+            setLastTokenVerification(parseInt(lastVerification));
           }
-        } else {
-          // Use cached data
-          if (savedUserInfo) {
-            setUserInfo(JSON.parse(savedUserInfo));
-          }
+        } else if (!result.isValid && result.error === 'Token expired or invalid') {
+          console.log('Token expired or invalid, clearing data');
+          clearAuthData();
+          setUserInfo(null);
+          setTokens(null);
         }
       }
 
@@ -72,8 +85,13 @@ function AppContent() {
         setTokens(JSON.parse(savedTokens));
       }
     } catch (error) {
-      console.error('Error loading saved data:', error);
-      clearAllData();
+      // Only clear data for JSON parsing errors, not for network errors
+      if (error instanceof SyntaxError) {
+        console.error('Error parsing saved data, clearing local storage:', error);
+        clearAuthData();
+      } else {
+        console.error('Error loading saved data:', error);
+      }
     }
   };
 
@@ -85,9 +103,9 @@ function AppContent() {
   useEffect(() => {
     if (userInfo) {
       const interval = setInterval(() => {
-        const accessToken = localStorage.getItem('access_token');
+        const accessToken = getAccessToken();
         if (accessToken) {
-          verifyToken(accessToken);
+          verifyAuthToken(accessToken);
         }
       }, TOKEN_VERIFICATION_INTERVAL);
 
@@ -95,44 +113,44 @@ function AppContent() {
     }
   }, [userInfo]);
 
-  const verifyToken = async (accessToken) => {
-    try {
-      const response = await fetch('http://localhost:5001/userinfo', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          setUserInfo(data.user);
-          localStorage.setItem('user_info', JSON.stringify(data.user));
-          setLastTokenVerification(Date.now());
-        }
-      } else if (response.status === 401) {
-        console.log('Token expired or invalid, clearing data');
-        clearAllData();
+  const verifyAuthToken = async (accessToken) => {
+    // Use the shared verifyToken function
+    const result = await verifyToken(accessToken);
+    if (result.isValid && result.user) {
+      setUserInfo(result.user);
+      // The timestamp is already stored in localStorage by verifyToken
+      const lastVerification = localStorage.getItem('last_token_verification');
+      if (lastVerification) {
+        setLastTokenVerification(parseInt(lastVerification));
       }
-    } catch (error) {
-      console.error('Token verification error:', error);
-      clearAllData();
+    } else if (!result.isValid && result.error === 'Token expired or invalid') {
+      console.log('Token expired or invalid, clearing data');
+      clearAuthData();
+      setUserInfo(null);
+      setTokens(null);
     }
   };
 
-  const clearAllData = () => {
-    localStorage.removeItem('tokens');
-    localStorage.removeItem('user_info');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('processed_codes');
+  const handleLogout = () => {
+    clearAuthData();
     setUserInfo(null);
     setTokens(null);
     setLastTokenVerification(null);
   };
 
-  const handleLogout = () => {
-    clearAllData();
+  const handleLoginSuccess = async (user, tokens) => {
+    console.log('Login successful, updating state with user info:', user);
+    
+    // Update state with user info and tokens
+    setUserInfo(user);
+    setTokens(tokens);
+    setIsAuthenticated(true);
+    
+    // Ensure state updates are processed
+    await new Promise(resolve => setTimeout(resolve, 0));
+    
+    // Trigger admin status check
+    await checkAdminStatus();
   };
 
   const handleSearch = () => {
@@ -144,6 +162,7 @@ function AppContent() {
       const token = localStorage.getItem('access_token');
       if (!token) {
         console.log('No access token found for admin check');
+        setIsAdmin(false);
         return;
       }
 
@@ -164,7 +183,10 @@ function AppContent() {
         return;
       }
 
-      console.log('Token verified, checking admin status...');
+      const userInfoData = await userInfoResponse.json();
+      console.log('User info verified:', userInfoData);
+
+      console.log('Checking admin status...');
       const response = await fetch('http://localhost:5001/api/admin/check', {
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -173,16 +195,49 @@ function AppContent() {
       });
 
       console.log('Admin check response:', response.status);
+      const data = await response.json();
+      console.log('Admin check data:', data);
+
       if (response.ok) {
-        console.log('User is an admin');
-        setIsAdmin(true);
+        setIsAdmin(data.is_admin);
+        if (data.is_admin) {
+          console.log('User is an admin with roles:', data.roles);
+          // Update user info with admin details
+          const updatedUserInfo = {
+            ...userInfoData.user,
+            isAdmin: true,
+            adminRoles: data.roles
+          };
+          setUserInfo(updatedUserInfo);
+          localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
+        } else {
+          console.log('User is not an admin');
+          // Update user info to reflect non-admin status
+          const updatedUserInfo = {
+            ...userInfoData.user,
+            isAdmin: false,
+            adminRoles: []
+          };
+          setUserInfo(updatedUserInfo);
+          localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
+        }
       } else {
-        console.log('User is not an admin');
+        console.log('Admin check failed:', response.status);
+        console.error('Admin check error:', data);
         setIsAdmin(false);
+        // Update user info to reflect non-admin status
+        const updatedUserInfo = {
+          ...userInfoData.user,
+          isAdmin: false,
+          adminRoles: []
+        };
+        setUserInfo(updatedUserInfo);
+        localStorage.setItem('user_info', JSON.stringify(updatedUserInfo));
       }
     } catch (err) {
       console.error('Error checking admin status:', err);
       setIsAdmin(false);
+      // Don't update user info on error to prevent data loss
     }
   };
 
@@ -208,16 +263,17 @@ function AppContent() {
         tokens={tokens}
         onLogout={handleLogout}
         isAdmin={isAdmin}
+        onLoginSuccess={handleLoginSuccess}
       />
       <Box sx={{ flex: 1 }}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage userInfo={userInfo} isAdmin={isAdmin} onLogout={handleLogout} />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route
             path="/create-deck"
             element={
               userInfo ? (
-                <Box>
-                  <Header />
+                <Box sx={{ flex: 1, p: 3 }}>
                   <CreateDeck />
                 </Box>
               ) : (
@@ -306,6 +362,55 @@ function AppContent() {
                 </Box>
               ) : (
                 <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/textbooks" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <TextbookDashboard />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/textbooks/analyze/:id" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <TextbookAnalyzer />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/editor/test" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1 }}>
+                  <EditorTestPage />
+                </Box>
+              ) : (
+                <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+                  <Typography variant="h5" sx={{ textAlign: 'center' }}>
+                    Please log in to access the editor
+                    <br/>
+                    <Button 
+                      variant="contained" 
+                      color="primary"
+                      sx={{ mt: 2 }}
+                      onClick={() => navigate('/')}
+                    >
+                      Go to Login
+                    </Button>
+                  </Typography>
+                </Box>
               )
             } 
           />

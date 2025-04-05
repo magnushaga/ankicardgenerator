@@ -212,14 +212,85 @@ def requires_admin(f):
     return decorated
 
 @admin.route('/check', methods=['GET'])
-@requires_admin
 def check_admin():
     """Check if the current user has admin access"""
-    logger.info("Admin check endpoint called")
-    return jsonify({
-        "status": "success",
-        "message": "Admin access granted"
-    })
+    try:
+        # Get token from header
+        auth_header = request.headers.get('Authorization')
+        if not auth_header or not auth_header.startswith('Bearer '):
+            logger.error("No valid Authorization header")
+            return jsonify({
+                "error": "No authorization header",
+                "is_admin": False,
+                "details": "Missing or invalid Authorization header"
+            }), 401
+            
+        token = auth_header.split(' ')[1]
+        logger.info(f"Checking admin status with token: {token[:20]}...")
+        
+        # Verify token
+        user_info = verify_token_with_cache(token)
+        if not user_info:
+            logger.error("Token verification failed")
+            return jsonify({
+                "error": "Invalid token",
+                "is_admin": False,
+                "details": "Token verification failed"
+            }), 401
+            
+        auth0_id = user_info.get('sub')
+        if not auth0_id:
+            logger.error("No user ID in token")
+            return jsonify({
+                "error": "Invalid user info",
+                "is_admin": False,
+                "details": "No user ID in token"
+            }), 401
+        
+        # Get user ID from our database
+        user_result = supabase.table('users').select('id').eq('auth0_id', auth0_id).execute()
+        if not user_result.data:
+            logger.error(f"User not found in database for auth0_id: {auth0_id}")
+            return jsonify({
+                "error": "User not found",
+                "is_admin": False,
+                "details": "User not found in database",
+                "auth0_id": auth0_id
+            }), 404
+            
+        user_id = user_result.data[0]['id']
+        logger.info(f"Checking admin status for user_id: {user_id}")
+        
+        # Check admin status
+        admin_status = is_admin(user_id)
+        logger.info(f"Admin status check result: {admin_status}")
+        
+        # Get user's roles and permissions
+        roles_result = supabase.table('user_admin_roles') \
+            .select('admin_roles(name)') \
+            .eq('user_id', user_id) \
+            .execute()
+            
+        roles = [role['admin_roles']['name'] for role in roles_result.data] if roles_result.data else []
+        logger.info(f"User roles: {roles}")
+        
+        return jsonify({
+            "is_admin": admin_status,
+            "roles": roles,
+            "user_id": user_id,
+            "auth0_id": auth0_id,
+            "email": user_info.get('email'),
+            "name": user_info.get('name'),
+            "picture": user_info.get('picture')
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in admin check: {str(e)}")
+        return jsonify({
+            "error": str(e),
+            "is_admin": False,
+            "details": "Internal server error during admin check"
+        }), 500
 
 @admin.route('/users', methods=['GET'])
 @requires_admin

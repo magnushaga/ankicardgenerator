@@ -11,13 +11,15 @@ import {
   Avatar,
   Divider,
   useTheme,
-  useMediaQuery
+  useMediaQuery,
+  Button,
+  Badge,
+  InputAdornment
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme as useCustomTheme } from '../lib/ThemeContext';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
@@ -25,51 +27,76 @@ import LoginButton from './LoginButton';
 import LogoutButton from './LogoutButton';
 import SearchIcon from '@mui/icons-material/Search';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import { verifyToken, clearAuthData, getAccessToken } from '../lib/authUtils';
 
-const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin }) => {
+const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin, onLoginSuccess }) => {
   const [anchorEl, setAnchorEl] = useState(null);
   const theme = useTheme();
   const { isDarkMode, toggleTheme } = useCustomTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [error, setError] = useState(null);
   const [isProcessingCode, setIsProcessingCode] = useState(false);
+  const [error, setError] = useState(null);
   const [lastTokenVerification, setLastTokenVerification] = useState(null);
   const TOKEN_VERIFICATION_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    console.log('=== Header Debug Info ===');
-    console.log('User Info:', userInfo);
-    console.log('Is Admin:', isAdmin);
-    console.log('==========================');
-  }, [userInfo, isAdmin]);
+    // Check for Auth0 code in URL on component mount
+    const handleAuthCallback = async () => {
+      try {
+        const queryParams = new URLSearchParams(window.location.search);
+        const code = queryParams.get('code');
+        if (code && !isProcessingCode) {
+          // Clear the code from the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
+          setIsProcessingCode(true);
+          console.log('Auth code detected, exchanging for token...');
+          
+          await exchangeCodeForToken(code);
+        }
+      } catch (error) {
+        console.error('Error handling Auth0 callback:', error);
+        setError(error.message);
+      }
+    };
 
+    handleAuthCallback();
+  }, [location]);
+
+  // This useEffect will check the token periodically
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const code = urlParams.get("code");
-    const error = urlParams.get("error");
-    const errorDescription = urlParams.get("error_description");
-
-    if (error) {
-      console.error('Auth0 error:', error, errorDescription);
-      setError(`Authentication error: ${errorDescription || error}`);
-      navigate('/', { replace: true });
-      return;
-    }
-
-    if (code && !isProcessingCode) {
-      console.log('Received Auth0 code:', code);
-      const processedCodes = JSON.parse(localStorage.getItem('processed_codes') || '[]');
-      if (processedCodes.includes(code)) {
-        console.log('Code already processed, skipping');
+    const checkToken = async () => {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        console.log('No access token found in localStorage');
         return;
       }
-      setIsProcessingCode(true);
-      exchangeCodeForToken(code);
-      navigate('/', { replace: true });
+      
+      // Use the shared verifyToken function
+      const result = await verifyToken(accessToken);
+      
+      if (!result.isValid && result.error === 'Token expired or invalid') {
+        console.log('Token expired or invalid, clearing data');
+        clearAuthData();
+        onLogout();
+      }
+    };
+
+    // Check on mount and then periodically
+    if (userInfo) {
+      checkToken();
+      
+      const interval = setInterval(() => {
+        checkToken();
+      }, TOKEN_VERIFICATION_INTERVAL);
+      
+      return () => clearInterval(interval);
     }
-  }, [location, navigate, isProcessingCode]);
+  }, [userInfo]);
 
   const exchangeCodeForToken = async (code) => {
     try {
@@ -102,83 +129,27 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
         localStorage.setItem('tokens', JSON.stringify(data.tokens));
         localStorage.setItem('user_info', JSON.stringify(data.user));
         localStorage.setItem('access_token', data.tokens.access_token);
-        setLastTokenVerification(Date.now());
+        localStorage.setItem('last_token_verification', Date.now().toString());
         console.log('Stored tokens and user info in localStorage');
+        
+        if (typeof onLoginSuccess === 'function') {
+          await new Promise(resolve => {
+            onLoginSuccess(data.user, data.tokens);
+            setTimeout(resolve, 100);
+          });
+        }
+
+        processedCodes.push(code);
+        localStorage.setItem('processed_codes', JSON.stringify(processedCodes));
       }
-
-      processedCodes.push(code);
-      localStorage.setItem('processed_codes', JSON.stringify(processedCodes));
-
-      window.location.reload();
     } catch (error) {
       console.error('Error exchanging code for tokens:', error);
-      clearAllData();
+      clearAuthData();
       setError(error.message);
       onLogout();
     } finally {
       setIsProcessingCode(false);
     }
-  };
-
-  const verifyToken = async () => {
-    const accessToken = localStorage.getItem('access_token');
-    if (!accessToken) {
-      console.log('No access token found in localStorage');
-      return;
-    }
-
-    const now = Date.now();
-    if (lastTokenVerification && (now - lastTokenVerification) < TOKEN_VERIFICATION_INTERVAL) {
-      console.log('Using cached token verification');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:5001/userinfo', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.log('Token expired or invalid, clearing data');
-          clearAllData();
-          return;
-        }
-        throw new Error('Token verification failed');
-      }
-
-      const data = await response.json();
-      console.log('Token verified successfully:', {
-        hasUserInfo: !!data.user,
-        userEmail: data.user?.email
-      });
-      
-      if (data.user) {
-        localStorage.setItem('user_info', JSON.stringify(data.user));
-        setLastTokenVerification(now);
-      }
-    } catch (error) {
-      console.error('Token verification error:', error);
-      clearAllData();
-      onLogout();
-    }
-  };
-
-  useEffect(() => {
-    if (userInfo) {
-      verifyToken();
-    }
-  }, [userInfo]);
-
-  const clearAllData = () => {
-    localStorage.removeItem('tokens');
-    localStorage.removeItem('user_info');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('processed_codes');
-    setLastTokenVerification(null);
   };
 
   const handleMenu = (event) => {
@@ -204,6 +175,11 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
     onLogout();
   };
 
+  console.log('=== Header Debug Info ===');
+  console.log('User Info:', userInfo);
+  console.log('Is Admin:', isAdmin);
+  console.log('==========================');
+
   return (
     <AppBar 
       position="static" 
@@ -215,25 +191,55 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
-        {/* Left side - Logo and Name */}
+        {/* Left side - Logo and Navigation */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <MenuBookIcon sx={{ color: 'text.primary' }} />
-          <Typography 
-            variant="h6" 
-            component="div" 
+          <Box 
             sx={{ 
-              fontWeight: 600,
-              color: 'text.primary'
+              display: 'flex', 
+              alignItems: 'center',
+              pl: 2
             }}
           >
-            StudIQ
-          </Typography>
-          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                fontWeight: 700,
+                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                backgroundClip: 'text',
+                textFillColor: 'transparent',
+                mr: 2,
+                cursor: 'pointer'
+              }}
+              onClick={() => navigate('/')}
+            >
+              StudIQ
+            </Typography>
+          </Box>
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
+            {['Courses', 'Textbooks', 'Universities', 'Pricing'].map((item) => (
+              <Button 
+                key={item} 
+                color="inherit" 
+                onClick={() => navigate(`/${item.toLowerCase()}`)}
+                sx={{ 
+                  textTransform: 'none',
+                  color: 'text.primary',
+                  '&:hover': {
+                    color: theme.palette.primary.main,
+                    bgcolor: 'transparent'
+                  }
+                }}
+              >
+                {item}
+              </Button>
+            ))}
+          </Box>
         </Box>
 
         {/* Center - Search (only show if user is logged in) */}
         {userInfo && (
-          <Box sx={{ flex: 1, maxWidth: 600, mx: 4 }}>
+          <Box sx={{ flex: 1, maxWidth: 400, mx: 4, display: { xs: 'none', md: 'block' } }}>
             <TextField
               fullWidth
               size="small"
@@ -241,6 +247,13 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && onSearch()}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+              }}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   bgcolor: 'background.default',
@@ -256,7 +269,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           </Box>
         )}
 
-        {/* Right side - Theme toggle and User menu */}
+        {/* Right side - Theme toggle, Notifications, Admin button, and User menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton 
             onClick={toggleTheme} 
@@ -265,6 +278,40 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           >
             {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
+
+          {/* Notifications */}
+          {userInfo && (
+            <IconButton 
+              color="inherit"
+              sx={{ color: 'text.primary' }}
+            >
+              <Badge badgeContent={3} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+          )}
+
+          {/* Admin Dashboard Button - Only show if user is admin */}
+          {userInfo && isAdmin && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<AdminPanelSettingsIcon />}
+              onClick={() => navigate('/admin')}
+              sx={{ 
+                mr: 1,
+                color: 'primary.main',
+                borderColor: 'primary.main',
+                '&:hover': {
+                  borderColor: 'primary.dark',
+                  bgcolor: 'primary.light',
+                  color: 'primary.dark'
+                }
+              }}
+            >
+              Admin
+            </Button>
+          )}
 
           {userInfo ? (
             <>
@@ -297,7 +344,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
                 </MenuItem>
                 {isAdmin && (
                   <MenuItem onClick={handleAdminPanel}>
-                    <PersonIcon sx={{ mr: 1 }} /> Admin Dashboard
+                    <AdminPanelSettingsIcon sx={{ mr: 1 }} /> Admin Dashboard
                   </MenuItem>
                 )}
                 <MenuItem onClick={handleLogout}>
