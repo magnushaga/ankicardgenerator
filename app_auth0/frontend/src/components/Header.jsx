@@ -28,6 +28,7 @@ import LogoutButton from './LogoutButton';
 import SearchIcon from '@mui/icons-material/Search';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import { verifyToken, clearAuthData, getAccessToken } from '../lib/authUtils';
 
 const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin, onLoginSuccess }) => {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -36,43 +37,66 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
   const navigate = useNavigate();
   const location = useLocation();
   const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
-  const [error, setError] = useState(null);
   const [isProcessingCode, setIsProcessingCode] = useState(false);
+  const [error, setError] = useState(null);
   const [lastTokenVerification, setLastTokenVerification] = useState(null);
   const TOKEN_VERIFICATION_INTERVAL = 5 * 60 * 1000; // 5 minutes in milliseconds
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    console.log('=== Header Debug Info ===');
-    console.log('User Info:', userInfo);
-    console.log('Is Admin:', isAdmin);
-    console.log('==========================');
-  }, [userInfo, isAdmin]);
+    // Check for Auth0 code in URL on component mount
+    const handleAuthCallback = async () => {
+      try {
+        const queryParams = new URLSearchParams(window.location.search);
+        const code = queryParams.get('code');
+        if (code && !isProcessingCode) {
+          // Clear the code from the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+          
+          setIsProcessingCode(true);
+          console.log('Auth code detected, exchanging for token...');
+          
+          await exchangeCodeForToken(code);
+        }
+      } catch (error) {
+        console.error('Error handling Auth0 callback:', error);
+        setError(error.message);
+      }
+    };
 
+    handleAuthCallback();
+  }, [location]);
+
+  // This useEffect will check the token periodically
   useEffect(() => {
-    const urlParams = new URLSearchParams(location.search);
-    const code = urlParams.get("code");
-    const error = urlParams.get("error");
-    const errorDescription = urlParams.get("error_description");
-
-    if (error) {
-      console.error('Auth0 error:', error, errorDescription);
-      setError(`Authentication error: ${errorDescription || error}`);
-      navigate('/', { replace: true });
-      return;
-    }
-
-    if (code && !isProcessingCode) {
-      console.log('Received Auth0 code:', code);
-      const processedCodes = JSON.parse(localStorage.getItem('processed_codes') || '[]');
-      if (processedCodes.includes(code)) {
-        console.log('Code already processed, skipping');
+    const checkToken = async () => {
+      const accessToken = getAccessToken();
+      if (!accessToken) {
+        console.log('No access token found in localStorage');
         return;
       }
-      setIsProcessingCode(true);
-      exchangeCodeForToken(code);
-      navigate('/', { replace: true });
+      
+      // Use the shared verifyToken function
+      const result = await verifyToken(accessToken);
+      
+      if (!result.isValid && result.error === 'Token expired or invalid') {
+        console.log('Token expired or invalid, clearing data');
+        clearAuthData();
+        onLogout();
+      }
+    };
+
+    // Check on mount and then periodically
+    if (userInfo) {
+      checkToken();
+      
+      const interval = setInterval(() => {
+        checkToken();
+      }, TOKEN_VERIFICATION_INTERVAL);
+      
+      return () => clearInterval(interval);
     }
-  }, [location, navigate, isProcessingCode]);
+  }, [userInfo]);
 
   const exchangeCodeForToken = async (code) => {
     try {
@@ -105,7 +129,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
         localStorage.setItem('tokens', JSON.stringify(data.tokens));
         localStorage.setItem('user_info', JSON.stringify(data.user));
         localStorage.setItem('access_token', data.tokens.access_token);
-        setLastTokenVerification(Date.now());
+        localStorage.setItem('last_token_verification', Date.now().toString());
         console.log('Stored tokens and user info in localStorage');
         
         if (typeof onLoginSuccess === 'function') {
@@ -120,73 +144,12 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
       }
     } catch (error) {
       console.error('Error exchanging code for tokens:', error);
-      clearAllData();
+      clearAuthData();
       setError(error.message);
       onLogout();
     } finally {
       setIsProcessingCode(false);
     }
-  };
-
-  const verifyToken = async () => {
-    const accessToken = localStorage.getItem('access_token');
-    if (!accessToken) {
-      console.log('No access token found in localStorage');
-      return;
-    }
-
-    const now = Date.now();
-    if (lastTokenVerification && (now - lastTokenVerification) < TOKEN_VERIFICATION_INTERVAL) {
-      console.log('Using cached token verification');
-      return;
-    }
-
-    try {
-      const response = await fetch('http://localhost:5001/userinfo', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        if (response.status === 401) {
-          console.log('Token expired or invalid, clearing data');
-          clearAllData();
-          return;
-        }
-        throw new Error('Token verification failed');
-      }
-
-      const data = await response.json();
-      console.log('Token verified successfully:', {
-        hasUserInfo: !!data.user,
-        userEmail: data.user?.email
-      });
-      
-      if (data.user) {
-        localStorage.setItem('user_info', JSON.stringify(data.user));
-        setLastTokenVerification(now);
-      }
-    } catch (error) {
-      console.error('Token verification error:', error);
-      clearAllData();
-      onLogout();
-    }
-  };
-
-  useEffect(() => {
-    if (userInfo) {
-      verifyToken();
-    }
-  }, [userInfo]);
-
-  const clearAllData = () => {
-    localStorage.removeItem('tokens');
-    localStorage.removeItem('user_info');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('processed_codes');
-    setLastTokenVerification(null);
   };
 
   const handleMenu = (event) => {
@@ -211,6 +174,11 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
     handleClose();
     onLogout();
   };
+
+  console.log('=== Header Debug Info ===');
+  console.log('User Info:', userInfo);
+  console.log('Is Admin:', isAdmin);
+  console.log('==========================');
 
   return (
     <AppBar 

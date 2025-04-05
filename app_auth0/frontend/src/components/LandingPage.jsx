@@ -24,7 +24,8 @@ import {
   ListItemIcon,
   ListItemText,
   AppBar,
-  Toolbar
+  Toolbar,
+  Link
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import { useTheme as useCustomTheme } from '../lib/ThemeContext';
@@ -287,69 +288,51 @@ const LandingPage = ({ userInfo, isAdmin, onLogout }) => {
         </Box>
 
         {/* Quick Actions */}
-        <Box sx={{ mb: { xs: 6, md: 8 } }}>
-          <Typography variant="h5" component="h2" sx={{ mb: 3, fontWeight: 600 }}>
+        <Box sx={{ my: { xs: 4, md: 6 } }}>
+          <Typography variant="h4" component="h2" fontWeight={700} sx={{ mb: 3 }}>
             Quick Actions
           </Typography>
-          <Grid container spacing={2}>
+          <Grid container spacing={3}>
             {quickActions.map((action, index) => (
-              <Grid item xs={12} sm={6} md={3} key={index}>
-                <Card 
-                  onClick={action.action}
-                  sx={{ 
+              <Grid xs={12} sm={6} md={3} key={index}>
+                <Paper
+                  sx={{
+                    p: 3,
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
-                    alignItems: 'center',
-                    textAlign: 'center',
-                    p: 3,
+                    transition: 'transform 0.2s, box-shadow 0.2s',
                     cursor: 'pointer',
-                    transition: 'all 0.3s ease-in-out',
-                    bgcolor: isDarkMode ? 'background.paper' : 'background.default',
-                    border: `1px solid ${theme.palette.divider}`,
                     '&:hover': {
-                      transform: 'translateY(-8px)',
-                      boxShadow: theme.shadows[8],
-                      borderColor: theme.palette.primary.main
+                      transform: 'translateY(-5px)',
+                      boxShadow: 6
                     }
                   }}
+                  onClick={action.action}
                 >
-                  <Box sx={{ 
-                    color: 'primary.main',
-                    mb: 2,
-                    p: 2,
-                    borderRadius: '50%',
-                    bgcolor: isDarkMode ? 'rgba(25, 118, 210, 0.1)' : 'rgba(25, 118, 210, 0.05)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center'
-                  }}>
-                    {action.icon}
-                  </Box>
-                  <CardContent sx={{ flexGrow: 1, p: 2 }}>
-                    <Typography 
-                      variant="h6" 
-                      component="h3" 
-                      sx={{ 
-                        mb: 1,
-                        fontWeight: 600,
-                        color: 'text.primary'
+                  <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+                    <Avatar
+                      sx={{
+                        bgcolor: 'primary.main',
+                        color: 'primary.contrastText',
+                        mr: 2
                       }}
                     >
+                      {action.icon}
+                    </Avatar>
+                    <Typography variant="h6" component="h3" fontWeight={600}>
                       {action.title}
                     </Typography>
-                    <Typography 
-                      variant="body1" 
-                      color="text.secondary"
-                      sx={{ 
-                        lineHeight: 1.6,
-                        fontSize: '0.95rem'
-                      }}
-                    >
-                      {action.description}
-                    </Typography>
-                  </CardContent>
-                </Card>
+                  </Box>
+                  <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                    {action.description}
+                  </Typography>
+                  <Box sx={{ mt: 'auto', display: 'flex', justifyContent: 'flex-end' }}>
+                    <IconButton size="small" color="primary">
+                      <ArrowForwardIcon />
+                    </IconButton>
+                  </Box>
+                </Paper>
               </Grid>
             ))}
           </Grid>
@@ -576,20 +559,21 @@ const LandingPage = ({ userInfo, isAdmin, onLogout }) => {
       <Box 
         component="footer" 
         sx={{ 
-          py: 4, 
-          px: 3, 
-          bgcolor: isDarkMode ? 'background.paper' : 'grey.50',
-          borderTop: `1px solid ${theme.palette.divider}`
+          mt: 8, 
+          pb: 8,
+          borderTop: 1,
+          borderColor: 'divider',
+          pt: 6
         }}
       >
         <Container maxWidth="lg">
           <Grid container spacing={4}>
-            <Grid item xs={12} sm={6} md={3}>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: 600 }}>
+            <Grid xs={12} sm={6} md={3}>
+              <Typography variant="h6" gutterBottom>
                 StudIQ
               </Typography>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Your AI-powered study companion for creating effective flashcards and notes.
+              <Typography variant="body2" color="text.secondary">
+                AI-powered study tools for students and educators.
               </Typography>
             </Grid>
             <Grid item xs={12} sm={6} md={3}>

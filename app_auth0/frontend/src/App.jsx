@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Typography } from '@mui/material';
+import { Box, Typography, Button } from '@mui/material';
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ThemeProvider } from './lib/ThemeContext';
 import Header from './components/Header';
@@ -15,6 +15,8 @@ import LandingPage from './components/LandingPage';
 import CreateDeck from './components/CreateDeck';
 import TextbookDashboard from './components/textbooks/TextbookDashboard';
 import TextbookAnalyzer from './components/textbooks/TextbookAnalyzer';
+import { EditorTestPage } from './editor';
+import { verifyToken, clearAuthData, getAccessToken } from './lib/authUtils';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -32,7 +34,7 @@ function AppContent() {
     try {
       const savedUserInfo = localStorage.getItem('user_info');
       const savedTokens = localStorage.getItem('tokens');
-      const accessToken = localStorage.getItem('access_token');
+      const accessToken = getAccessToken();
 
       console.log('=== App.jsx Debug Info ===');
       console.log('Current User Info:', savedUserInfo ? JSON.parse(savedUserInfo) : null);
@@ -46,27 +48,36 @@ function AppContent() {
       }
 
       if (accessToken) {
-        const now = Date.now();
-        if (!lastTokenVerification || (now - lastTokenVerification) >= TOKEN_VERIFICATION_INTERVAL) {
-          // Verify token with backend
-          const response = await fetch('http://localhost:5001/userinfo', {
-            headers: {
-              'Authorization': `Bearer ${accessToken}`,
-              'Content-Type': 'application/json'
-            }
-          });
-
-          if (response.ok) {
-            const data = await response.json();
-            if (data.user) {
-              setUserInfo(data.user);
-              localStorage.setItem('user_info', JSON.stringify(data.user));
-              setLastTokenVerification(now);
-            }
-          } else if (response.status === 401) {
-            console.log('Token expired or invalid, clearing data');
-            clearAllData();
+        // Set a timeout to prevent getting stuck in loading state
+        const timeoutPromise = new Promise((resolve) => {
+          setTimeout(() => {
+            console.log("Token verification timeout - using cached data");
+            resolve({ 
+              isValid: true, 
+              user: savedUserInfo ? JSON.parse(savedUserInfo) : null, 
+              error: 'Verification timeout' 
+            });
+          }, 10000);
+        });
+        
+        // Race the verification against the timeout
+        const result = await Promise.race([
+          verifyToken(accessToken, true),
+          timeoutPromise
+        ]);
+        
+        if (result.isValid && result.user) {
+          setUserInfo(result.user);
+          // The timestamp is already stored in localStorage by verifyToken
+          const lastVerification = localStorage.getItem('last_token_verification');
+          if (lastVerification) {
+            setLastTokenVerification(parseInt(lastVerification));
           }
+        } else if (!result.isValid && result.error === 'Token expired or invalid') {
+          console.log('Token expired or invalid, clearing data');
+          clearAuthData();
+          setUserInfo(null);
+          setTokens(null);
         }
       }
 
@@ -74,8 +85,13 @@ function AppContent() {
         setTokens(JSON.parse(savedTokens));
       }
     } catch (error) {
-      console.error('Error loading saved data:', error);
-      clearAllData();
+      // Only clear data for JSON parsing errors, not for network errors
+      if (error instanceof SyntaxError) {
+        console.error('Error parsing saved data, clearing local storage:', error);
+        clearAuthData();
+      } else {
+        console.error('Error loading saved data:', error);
+      }
     }
   };
 
@@ -87,9 +103,9 @@ function AppContent() {
   useEffect(() => {
     if (userInfo) {
       const interval = setInterval(() => {
-        const accessToken = localStorage.getItem('access_token');
+        const accessToken = getAccessToken();
         if (accessToken) {
-          verifyToken(accessToken);
+          verifyAuthToken(accessToken);
         }
       }, TOKEN_VERIFICATION_INTERVAL);
 
@@ -97,44 +113,29 @@ function AppContent() {
     }
   }, [userInfo]);
 
-  const verifyToken = async (accessToken) => {
-    try {
-      const response = await fetch('http://localhost:5001/userinfo', {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.user) {
-          setUserInfo(data.user);
-          localStorage.setItem('user_info', JSON.stringify(data.user));
-          setLastTokenVerification(Date.now());
-        }
-      } else if (response.status === 401) {
-        console.log('Token expired or invalid, clearing data');
-        clearAllData();
+  const verifyAuthToken = async (accessToken) => {
+    // Use the shared verifyToken function
+    const result = await verifyToken(accessToken);
+    if (result.isValid && result.user) {
+      setUserInfo(result.user);
+      // The timestamp is already stored in localStorage by verifyToken
+      const lastVerification = localStorage.getItem('last_token_verification');
+      if (lastVerification) {
+        setLastTokenVerification(parseInt(lastVerification));
       }
-    } catch (error) {
-      console.error('Token verification error:', error);
-      clearAllData();
+    } else if (!result.isValid && result.error === 'Token expired or invalid') {
+      console.log('Token expired or invalid, clearing data');
+      clearAuthData();
+      setUserInfo(null);
+      setTokens(null);
     }
   };
 
-  const clearAllData = () => {
-    localStorage.removeItem('tokens');
-    localStorage.removeItem('user_info');
-    localStorage.removeItem('access_token');
-    localStorage.removeItem('processed_codes');
+  const handleLogout = () => {
+    clearAuthData();
     setUserInfo(null);
     setTokens(null);
     setLastTokenVerification(null);
-  };
-
-  const handleLogout = () => {
-    clearAllData();
   };
 
   const handleLoginSuccess = async (user, tokens) => {
@@ -267,6 +268,7 @@ function AppContent() {
       <Box sx={{ flex: 1 }}>
         <Routes>
           <Route path="/" element={<LandingPage userInfo={userInfo} isAdmin={isAdmin} onLogout={handleLogout} />} />
+          <Route path="/login" element={<Navigate to="/" replace />} />
           <Route
             path="/create-deck"
             element={
@@ -384,6 +386,31 @@ function AppContent() {
                 </Box>
               ) : (
                 <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/editor/test" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1 }}>
+                  <EditorTestPage />
+                </Box>
+              ) : (
+                <Box sx={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center', height: '50vh' }}>
+                  <Typography variant="h5" sx={{ textAlign: 'center' }}>
+                    Please log in to access the editor
+                    <br/>
+                    <Button 
+                      variant="contained" 
+                      color="primary"
+                      sx={{ mt: 2 }}
+                      onClick={() => navigate('/')}
+                    >
+                      Go to Login
+                    </Button>
+                  </Typography>
+                </Box>
               )
             } 
           />
