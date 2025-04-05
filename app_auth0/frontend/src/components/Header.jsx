@@ -12,13 +12,14 @@ import {
   Divider,
   useTheme,
   useMediaQuery,
-  Button
+  Button,
+  Badge,
+  InputAdornment
 } from '@mui/material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTheme as useCustomTheme } from '../lib/ThemeContext';
 import Brightness4Icon from '@mui/icons-material/Brightness4';
 import Brightness7Icon from '@mui/icons-material/Brightness7';
-import MenuBookIcon from '@mui/icons-material/MenuBook';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import PersonIcon from '@mui/icons-material/Person';
@@ -26,6 +27,7 @@ import LoginButton from './LoginButton';
 import LogoutButton from './LogoutButton';
 import SearchIcon from '@mui/icons-material/Search';
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings';
+import NotificationsIcon from '@mui/icons-material/Notifications';
 
 const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLogout, isAdmin, onLoginSuccess }) => {
   const [anchorEl, setAnchorEl] = useState(null);
@@ -221,25 +223,55 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
       }}
     >
       <Toolbar sx={{ justifyContent: 'space-between' }}>
-        {/* Left side - Logo and Name */}
+        {/* Left side - Logo and Navigation */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <MenuBookIcon sx={{ color: 'text.primary' }} />
-          <Typography 
-            variant="h6" 
-            component="div" 
+          <Box 
             sx={{ 
-              fontWeight: 600,
-              color: 'text.primary'
+              display: 'flex', 
+              alignItems: 'center',
+              pl: 2
             }}
           >
-            StudIQ
-          </Typography>
-          <Divider orientation="vertical" flexItem sx={{ mx: 2 }} />
+            <Typography 
+              variant="h6" 
+              component="div" 
+              sx={{ 
+                fontWeight: 700,
+                background: `linear-gradient(45deg, ${theme.palette.primary.main}, ${theme.palette.secondary.main})`,
+                backgroundClip: 'text',
+                textFillColor: 'transparent',
+                mr: 2,
+                cursor: 'pointer'
+              }}
+              onClick={() => navigate('/')}
+            >
+              StudIQ
+            </Typography>
+          </Box>
+          <Box sx={{ display: { xs: 'none', md: 'flex' }, gap: 1 }}>
+            {['Courses', 'Textbooks', 'Universities', 'Pricing'].map((item) => (
+              <Button 
+                key={item} 
+                color="inherit" 
+                onClick={() => navigate(`/${item.toLowerCase()}`)}
+                sx={{ 
+                  textTransform: 'none',
+                  color: 'text.primary',
+                  '&:hover': {
+                    color: theme.palette.primary.main,
+                    bgcolor: 'transparent'
+                  }
+                }}
+              >
+                {item}
+              </Button>
+            ))}
+          </Box>
         </Box>
 
         {/* Center - Search (only show if user is logged in) */}
         {userInfo && (
-          <Box sx={{ flex: 1, maxWidth: 600, mx: 4 }}>
+          <Box sx={{ flex: 1, maxWidth: 400, mx: 4, display: { xs: 'none', md: 'block' } }}>
             <TextField
               fullWidth
               size="small"
@@ -247,6 +279,13 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyPress={(e) => e.key === 'Enter' && onSearch()}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon color="action" />
+                  </InputAdornment>
+                ),
+              }}
               sx={{
                 '& .MuiOutlinedInput-root': {
                   bgcolor: 'background.default',
@@ -262,7 +301,7 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           </Box>
         )}
 
-        {/* Right side - Theme toggle, Admin button, and User menu */}
+        {/* Right side - Theme toggle, Notifications, Admin button, and User menu */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <IconButton 
             onClick={toggleTheme} 
@@ -271,6 +310,18 @@ const Header = ({ onSearch, searchQuery, setSearchQuery, userInfo, tokens, onLog
           >
             {isDarkMode ? <Brightness7Icon /> : <Brightness4Icon />}
           </IconButton>
+
+          {/* Notifications */}
+          {userInfo && (
+            <IconButton 
+              color="inherit"
+              sx={{ color: 'text.primary' }}
+            >
+              <Badge badgeContent={3} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+          )}
 
           {/* Admin Dashboard Button - Only show if user is admin */}
           {userInfo && isAdmin && (

@@ -13,6 +13,8 @@ import AdminDashboard from './components/AdminDashboard';
 import LogoutButton from './components/LogoutButton';
 import LandingPage from './components/LandingPage';
 import CreateDeck from './components/CreateDeck';
+import TextbookDashboard from './components/textbooks/TextbookDashboard';
+import TextbookAnalyzer from './components/textbooks/TextbookAnalyzer';
 
 function AppContent() {
   const [searchQuery, setSearchQuery] = useState('');
@@ -264,7 +266,7 @@ function AppContent() {
       />
       <Box sx={{ flex: 1 }}>
         <Routes>
-          <Route path="/" element={<LandingPage />} />
+          <Route path="/" element={<LandingPage userInfo={userInfo} isAdmin={isAdmin} onLogout={handleLogout} />} />
           <Route
             path="/create-deck"
             element={
@@ -355,6 +357,30 @@ function AppContent() {
               userInfo ? (
                 <Box sx={{ flex: 1, p: 3 }}>
                   <AnkiDeckViewer />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/textbooks" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <TextbookDashboard />
+                </Box>
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
+          <Route 
+            path="/textbooks/analyze/:id" 
+            element={
+              userInfo ? (
+                <Box sx={{ flex: 1, p: 3 }}>
+                  <TextbookAnalyzer />
                 </Box>
               ) : (
                 <Navigate to="/login" replace />
